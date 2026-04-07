@@ -1,0 +1,79 @@
+<?php
+
+namespace App\Contracts\Services;
+
+use App\Models\Card;
+use Illuminate\Database\Eloquent\Collection;
+
+interface CardServiceInterface
+{
+    // ---------------------------------------------------------------
+    // Issuance
+    // ---------------------------------------------------------------
+
+    /**
+     * إصدار بطاقة NFC جديدة لمحفظة
+     * يُشفّر nfc_uid قبل الحفظ ويحفظ key reference في KMS
+     *
+     * @param  int    $walletId    المحفظة المرتبطة بالبطاقة
+     * @param  int    $agentId     الوكيل الذي يصدر البطاقة
+     * @param  string $nfcUid      المعرف الفيزيائي للبطاقة (قبل التشفير)
+     * @param  string $pin         رقم السر المُختار من المستخدم
+     * @throws \App\Exceptions\Card\NfcUidAlreadyExistsException
+     * @throws \App\Exceptions\Card\WalletNotFoundException
+     */
+    public function issue(int $walletId, int $agentId, string $nfcUid, string $pin): Card;
+
+    // ---------------------------------------------------------------
+    // Retrieval
+    // ---------------------------------------------------------------
+
+    public function getById(int $id): ?Card;
+
+    public function getByWalletId(int $walletId): Collection;
+
+    public function getByNfcUid(string $nfcUid): ?Card;
+
+    // ---------------------------------------------------------------
+    // PIN Management
+    // ---------------------------------------------------------------
+
+    /**
+     * @throws \App\Exceptions\Card\InvalidPinException
+     */
+    public function changePin(int $cardId, string $currentPin, string $newPin): bool;
+
+    /**
+     * إعادة تعيين PIN عبر OTP (للحالات المنسية)
+     *
+     * @throws \App\Exceptions\Auth\InvalidOtpException
+     */
+    public function resetPin(int $cardId, int $userId, string $otpCode, string $newPin): bool;
+
+    public function unlockPin(int $cardId): bool;
+
+    // ---------------------------------------------------------------
+    // Status Management
+    // ---------------------------------------------------------------
+
+    public function block(int $cardId, string $reason): bool;
+
+    public function unblock(int $cardId): bool;
+
+    /** تعليم البطاقات المنتهية تلقائياً (Scheduled Job) */
+    public function expireOutdatedCards(): int;
+
+    // ---------------------------------------------------------------
+    // Validation
+    // ---------------------------------------------------------------
+
+    /**
+     * التحقق من البطاقة + PIN قبل أي عملية دفع
+     *
+     * @throws \App\Exceptions\Card\CardBlockedException
+     * @throws \App\Exceptions\Card\CardExpiredException
+     * @throws \App\Exceptions\Card\InvalidPinException
+     * @throws \App\Exceptions\Card\PinLockedException
+     */
+    public function validateForPayment(int $cardId, string $pin): bool;
+}

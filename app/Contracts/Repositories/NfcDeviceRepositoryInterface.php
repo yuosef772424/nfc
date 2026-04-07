@@ -1,0 +1,56 @@
+<?php
+
+namespace App\Contracts\Repositories;
+
+use App\Models\NfcDevice;
+use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+
+interface NfcDeviceRepositoryInterface
+{
+    // ---------------------------------------------------------------
+    // Retrieval
+    // ---------------------------------------------------------------
+
+    public function findById(int $id): ?NfcDevice;
+
+    public function findByUuid(string $uuid): ?NfcDevice;
+
+    public function getByUserId(int $userId): Collection;
+
+    public function getByType(string $deviceType, int $perPage = 20): LengthAwarePaginator;
+
+    public function getAll(array $filters = [], int $perPage = 20): LengthAwarePaginator;
+
+    // --- الدوال المنقولة من الموديل (النطاقات) ---
+    public function getActive(): Collection;                         // كانت scopeActive
+    public function getPhysical(): Collection;                       // كانت scopePhysical
+    public function getMobile(): Collection;                         // كانت scopeMobile
+
+    // --- الدوال المساعدة المنقولة ---
+    public function isPhysical(int $id): bool;                       // كانت isPhysical
+    public function isMobile(int $id): bool;                         // كانت isMobile
+
+    /** جلب التفاصيل المناسبة (Physical أو Mobile) حسب نوع الجهاز */
+    public function getDetails(int $id): ?\Illuminate\Database\Eloquent\Model; // كانت details()
+
+    // ---------------------------------------------------------------
+    // Write
+    // ---------------------------------------------------------------
+
+    public function create(int $userId, array $data): NfcDevice;
+
+    public function updateStatus(int $id, string $status): bool;
+
+    public function update(int $id, array $data): bool;
+
+    public function delete(int $id): bool;
+
+    // ---------------------------------------------------------------
+    // Checks
+    // ---------------------------------------------------------------
+
+    public function isActive(int $id): bool;
+
+    public function existsByUuid(string $uuid): bool;
+}

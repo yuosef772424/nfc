@@ -1,0 +1,51 @@
+<?php
+
+namespace App\Contracts\Repositories;
+
+use App\Models\WalletTransaction;
+use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+
+interface TransactionRepositoryInterface
+{
+    // ---------------------------------------------------------------
+    // Retrieval
+    // ---------------------------------------------------------------
+
+    public function findById(int $id): ?WalletTransaction;
+    public function findByUuid(string $uuid): ?WalletTransaction;
+    public function getByWalletId(int $walletId, array $filters = [], int $perPage = 20): LengthAwarePaginator;
+    public function getSentByWallet(int $walletId, int $perPage = 20): LengthAwarePaginator;
+    public function getReceivedByWallet(int $walletId, int $perPage = 20): LengthAwarePaginator;
+    public function getByType(string $type, int $perPage = 20): LengthAwarePaginator;
+    public function getByStatus(string $status, int $perPage = 20): LengthAwarePaginator;
+    public function getAll(array $filters = [], int $perPage = 20): LengthAwarePaginator;
+    public function getPending(): Collection;  // موجودة أصلاً
+
+    // --- الدوال المنقولة من الموديل (النطاقات والدوال المساعدة) ---
+    public function getCompleted(): Collection;                    // scopeCompleted
+    public function getFailed(): Collection;                       // scopeFailed
+    public function getByTransactionType(string $type): Collection; // scopeOfType (بديل)
+
+    public function isCompleted(int $id): bool;                    // isCompleted
+    public function isPending(int $id): bool;                      // isPending
+    public function isFailed(int $id): bool;                       // isFailed
+    public function isRefundable(int $id): bool;                   // isRefundable
+
+    // ---------------------------------------------------------------
+    // Aggregates
+    // ---------------------------------------------------------------
+
+    public function sumByWallet(int $walletId, string $type, string $status = 'completed'): float;
+    public function countByWallet(int $walletId, array $filters = []): int;
+
+    // ---------------------------------------------------------------
+    // Write
+    // ---------------------------------------------------------------
+
+    public function create(array $data): WalletTransaction;
+    public function updateStatus(int $id, string $status, ?string $failureReason = null, ?string $failureCode = null): bool;
+    public function markCompleted(int $id): bool;
+    public function markFailed(int $id, string $reason, ?string $code = null): bool;
+    public function markCancelled(int $id): bool;
+}
