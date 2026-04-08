@@ -149,4 +149,6 @@ class WalletRepository implements WalletRepositoryInterface
         $wallet = $this->findById($id);
         return $wallet ? $wallet->update($data) : false;
     }
+
+    
 }

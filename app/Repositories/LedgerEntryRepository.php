@@ -23,7 +23,7 @@ class LedgerEntryRepository implements LedgerEntryRepositoryInterface
     {
         return $this->configRepo->getValue('constant', "ledger_entry_type.{$typeKey}");
     }
-
+     
     // ------------------- Retrieval -------------------
     public function findById(int $id, array $with = []): ?LedgerEntry
     {
@@ -124,6 +124,13 @@ class LedgerEntryRepository implements LedgerEntryRepositoryInterface
             ->where('entry_type', $debitType)
             ->sum('amount');
     }
+    public function isBalanced(int $walletId): bool
+{
+    $credits = $this->sumCredits($walletId);
+    $debits = $this->sumDebits($walletId);
+    // مقارنة بأمان مع تسامح بسيط للفاصلة العائمة
+    return abs($credits - $debits) < 0.00001;
+}
 
     // ------------------- Write -------------------
     public function create(int $transactionId, int $walletId, string $entryType, float $amount, float $balanceAfter): LedgerEntry
