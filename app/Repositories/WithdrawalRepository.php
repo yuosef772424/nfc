@@ -18,70 +18,74 @@ class WithdrawalRepository implements WithdrawalRepositoryInterface
         $this->configRepo = $configRepo;
     }
 
-    // ------------------- دوال مساعدة لقراءة الثوابت من app_config -------------------
+    // ------------------- Helpers -------------------
     protected function getWithdrawalStatusConstant(string $statusKey): ?string
     {
         return $this->configRepo->getValue('constant', "withdrawal_status.{$statusKey}");
     }
 
     // ------------------- Retrieval -------------------
-    public function findById(int $id): ?Withdrawal
+    public function findById(int $id, array $with = []): ?Withdrawal
     {
-        return Withdrawal::find($id);
+        return Withdrawal::with($with)->find($id);
     }
 
-    public function getByWalletId(int $walletId, int $perPage = 20): LengthAwarePaginator
+    public function getByWalletId(int $walletId, int $perPage = 20, array $with = []): LengthAwarePaginator
     {
-        return Withdrawal::where('wallet_id', $walletId)->paginate($perPage);
+        return Withdrawal::with($with)->where('wallet_id', $walletId)->paginate($perPage);
     }
 
-    public function getByAgentId(int $agentId, int $perPage = 20): LengthAwarePaginator
+    public function getByAgentId(int $agentId, int $perPage = 20, array $with = []): LengthAwarePaginator
     {
-        return Withdrawal::where('agent_id', $agentId)->paginate($perPage);
+        return Withdrawal::with($with)->where('agent_id', $agentId)->paginate($perPage);
     }
 
-    public function getByStatus(string $status, int $perPage = 20): LengthAwarePaginator
+    public function getByStatus(string $status, int $perPage = 20, array $with = []): LengthAwarePaginator
     {
-        return Withdrawal::where('status', $status)->paginate($perPage);
+        return Withdrawal::with($with)->where('status', $status)->paginate($perPage);
     }
 
-    public function getAll(array $filters = [], int $perPage = 20): LengthAwarePaginator
+    public function getAll(array $filters = [], int $perPage = 20, array $with = []): LengthAwarePaginator
     {
-        $query = Withdrawal::query();
+        $query = Withdrawal::with($with);
+
         if (!empty($filters['status'])) {
             $query->where('status', $filters['status']);
         }
         if (!empty($filters['agent_id'])) {
             $query->where('agent_id', $filters['agent_id']);
         }
+
         return $query->paginate($perPage);
     }
 
-    public function getPendingExpired(): Collection
+    public function getPendingExpired(array $with = []): Collection
     {
         $pendingStatus = $this->getWithdrawalStatusConstant('pending') ?? 'pending';
-        return Withdrawal::where('status', $pendingStatus)
+        return Withdrawal::with($with)
+            ->where('status', $pendingStatus)
             ->where('expires_at', '<', now())
             ->get();
     }
 
-    // ------------------- الدوال المنقولة من الموديل -------------------
-    public function getPending(): Collection
+    public function getPending(array $with = []): Collection
     {
         $pendingStatus = $this->getWithdrawalStatusConstant('pending') ?? 'pending';
-        return Withdrawal::where('status', $pendingStatus)->get();
+        return Withdrawal::with($with)->where('status', $pendingStatus)->get();
     }
 
-    public function getCompleted(): Collection
+    public function getCompleted(array $with = []): Collection
     {
         $completedStatus = $this->getWithdrawalStatusConstant('completed') ?? 'completed';
-        return Withdrawal::where('status', $completedStatus)->get();
+        return Withdrawal::with($with)->where('status', $completedStatus)->get();
     }
 
     public function isExpired(int $id): bool
     {
         $withdrawal = $this->findById($id);
-        if (!$withdrawal) return false;
+        if (!$withdrawal) {
+            return false;
+        }
         $pendingStatus = $this->getWithdrawalStatusConstant('pending') ?? 'pending';
         return $withdrawal->expires_at->isPast() && $withdrawal->status === $pendingStatus;
     }
@@ -89,7 +93,9 @@ class WithdrawalRepository implements WithdrawalRepositoryInterface
     public function isPending(int $id): bool
     {
         $withdrawal = $this->findById($id);
-        if (!$withdrawal) return false;
+        if (!$withdrawal) {
+            return false;
+        }
         $pendingStatus = $this->getWithdrawalStatusConstant('pending') ?? 'pending';
         return $withdrawal->status === $pendingStatus;
     }
@@ -97,14 +103,18 @@ class WithdrawalRepository implements WithdrawalRepositoryInterface
     public function verifyCode(int $id, string $code): bool
     {
         $withdrawal = $this->findById($id);
-        if (!$withdrawal) return false;
+        if (!$withdrawal) {
+            return false;
+        }
         return Hash::check($code, $withdrawal->verification_code);
     }
 
     public function markCompleted(int $id): bool
     {
         $withdrawal = $this->findById($id);
-        if (!$withdrawal) return false;
+        if (!$withdrawal) {
+            return false;
+        }
         $completedStatus = $this->getWithdrawalStatusConstant('completed') ?? 'completed';
         return $withdrawal->update([
             'status'       => $completedStatus,
@@ -162,10 +172,3 @@ class WithdrawalRepository implements WithdrawalRepositoryInterface
             ->update(['status' => $cancelledStatus]);
     }
 }
-
-
-// INSERT INTO app_config (group, key, value, label, meta) VALUES
-// ('constant', 'withdrawal_status.pending', 'pending', 'معلق', '{"category":"withdrawal_status"}'),
-// ('constant', 'withdrawal_status.completed', 'completed', 'مكتمل', '{"category":"withdrawal_status"}'),
-// ('constant', 'withdrawal_status.failed', 'failed', 'فاشل', '{"category":"withdrawal_status"}'),
-// ('constant', 'withdrawal_status.cancelled', 'cancelled', 'ملغي', '{"category":"withdrawal_status"}');

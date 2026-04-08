@@ -8,28 +8,26 @@ use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 
 class UserKycRepository implements UserKycRepositoryInterface
 {
-    // جلب KYC لمستخدم بواسطة user_id
-    public function findByUserId(int $userId): ?UserKyc
+    // ------------------- Retrieval -------------------
+    public function getByUserId(int $userId, array $with = []): ?UserKyc
     {
-        return UserKyc::find($userId);
+        return UserKyc::with($with)->where('user_id', $userId)->first();
     }
 
-    // جلب طلبات KYC المعلقة (غير موثقة)
-    public function getPending(int $perPage = 20): LengthAwarePaginator
+    public function getPending(int $perPage = 20, array $with = []): LengthAwarePaginator
     {
-        return UserKyc::whereNull('verified_at')->paginate($perPage);
+        return UserKyc::with($with)->whereNull('verified_at')->paginate($perPage);
     }
 
-    // جلب طلبات KYC الموثقة
-    public function getVerified(int $perPage = 20): LengthAwarePaginator
+    public function getVerified(int $perPage = 20, array $with = []): LengthAwarePaginator
     {
-        return UserKyc::whereNotNull('verified_at')->paginate($perPage);
+        return UserKyc::with($with)->whereNotNull('verified_at')->paginate($perPage);
     }
 
-    // إنشاء أو تحديث KYC لمستخدم
+    // ------------------- Write -------------------
     public function createOrUpdate(int $userId, array $data): UserKyc
     {
-        $kyc = $this->findByUserId($userId);
+        $kyc = $this->getByUserId($userId);
         if ($kyc) {
             $kyc->update($data);
             return $kyc;
@@ -38,46 +36,41 @@ class UserKycRepository implements UserKycRepositoryInterface
         return UserKyc::create($data);
     }
 
-    // تعليم KYC كموثق (تحديد verified_at)
     public function markVerified(int $userId): bool
     {
-        $kyc = $this->findByUserId($userId);
+        $kyc = $this->getByUserId($userId);
         if (!$kyc) return false;
         return $kyc->update(['verified_at' => now()]);
     }
 
-    // تحديث بيانات KYC
     public function update(int $userId, array $data): bool
     {
-        $kyc = $this->findByUserId($userId);
+        $kyc = $this->getByUserId($userId);
         if (!$kyc) return false;
         return $kyc->update($data);
     }
 
-    // حذف KYC لمستخدم
     public function delete(int $userId): bool
     {
-        $kyc = $this->findByUserId($userId);
+        $kyc = $this->getByUserId($userId);
         if (!$kyc) return false;
         return (bool) $kyc->delete();
     }
 
-    // هل المستخدم موثق؟
+    // ------------------- Checks -------------------
     public function isVerified(int $userId): bool
     {
-        $kyc = $this->findByUserId($userId);
+        $kyc = $this->getByUserId($userId);
         return $kyc && $kyc->verified_at !== null;
     }
 
-    // هل وثائق الهوية منتهية الصلاحية؟
     public function isExpired(int $userId): bool
     {
-        $kyc = $this->findByUserId($userId);
+        $kyc = $this->getByUserId($userId);
         if (!$kyc || !$kyc->id_expiry_date) return false;
         return $kyc->id_expiry_date->isPast();
     }
 
-    // هل يوجد سجل KYC لهذا المستخدم؟
     public function exists(int $userId): bool
     {
         return UserKyc::where('user_id', $userId)->exists();

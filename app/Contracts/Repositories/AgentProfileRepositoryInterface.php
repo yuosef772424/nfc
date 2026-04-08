@@ -11,7 +11,7 @@ interface AgentProfileRepositoryInterface
     // ---------------------------------------------------------------
     // Retrieval
     // ---------------------------------------------------------------
-    public function findByUserId(int $userId): ?AgentProfile;
+    public function getByUserId(int $userId): ?AgentProfile;
     public function getAll(int $perPage = 20): LengthAwarePaginator;
     public function getActive(): Collection;
 

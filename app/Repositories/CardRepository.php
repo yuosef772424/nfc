@@ -4,112 +4,96 @@ namespace App\Repositories;
 
 use App\Models\Card;
 use App\Contracts\Repositories\CardRepositoryInterface;
-use App\Contracts\Repositories\AppConfigRepositoryInterface;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\Hash;
 
 class CardRepository implements CardRepositoryInterface
 {
-    protected AppConfigRepositoryInterface $configRepo;
-
-    public function __construct(AppConfigRepositoryInterface $configRepo)
+    // ========== RETRIEVAL ==========
+    public function findById(int $id, array $with = []): ?Card
     {
-        $this->configRepo = $configRepo;
+        return Card::with($with)->find($id);
     }
 
-    // ------------------- دوال مساعدة لقراءة الثوابت من app_config -------------------
-    protected function getCardStatusConstant(string $statusKey): ?string
+    public function getByNfcUid(string $nfcUid, array $with = []): ?Card
     {
-        return $this->configRepo->getValue('constant', "card_status.{$statusKey}");
+        return Card::with($with)->where('nfc_uid', $nfcUid)->first();
     }
 
-    // ------------------- Retrieval -------------------
-    public function findById(int $id): ?Card
+    public function getByCardNumber(string $cardNumber, array $with = []): ?Card
     {
-        return Card::find($id);
+        return Card::with($with)->where('card_number', $cardNumber)->first();
     }
 
-    public function findByNfcUid(string $nfcUid): ?Card
+    public function getByWalletId(int $walletId, array $with = []): Collection
     {
-        return Card::where('nfc_uid', $nfcUid)->first();
+        return Card::with($with)->where('wallet_id', $walletId)->get();
     }
 
-    public function findByCardNumber(string $cardNumber): ?Card
+    public function getByAgentId(int $agentId, int $perPage = 20, array $with = []): LengthAwarePaginator
     {
-        return Card::where('card_number', $cardNumber)->first();
+        return Card::with($with)
+            ->where('agent_id', $agentId)
+            ->latest('id')
+            ->paginate($perPage);
     }
 
-    public function getByWalletId(int $walletId): Collection
+    /**
+     * Get all cards with optional status filter and eager loading.
+     */
+    public function getAll(array $filters = [], int $perPage = 20, array $with = []): LengthAwarePaginator
     {
-        return Card::where('wallet_id', $walletId)->get();
-    }
+        $query = Card::with($with);
 
-    public function getByAgentId(int $agentId, int $perPage = 20): LengthAwarePaginator
-    {
-        return Card::where('agent_id', $agentId)->paginate($perPage);
-    }
-
-    public function getAll(array $filters = [], int $perPage = 20): LengthAwarePaginator
-    {
-        $query = Card::query();
         if (!empty($filters['status'])) {
             $query->where('status', $filters['status']);
         }
-        return $query->paginate($perPage);
+        if (!empty($filters['wallet_id'])) {
+            $query->where('wallet_id', $filters['wallet_id']);
+        }
+
+        return $query->latest('id')->paginate($perPage);
     }
 
-    public function getActive(): Collection
+    public function getActive(array $with = []): Collection
     {
-        $activeStatus = $this->getCardStatusConstant('active') ?? 'active';
-        return Card::where('status', $activeStatus)->get();
+        return Card::with($with)->where('status', 'active')->get();
     }
 
-    public function getExpired(): Collection
+    public function getExpired(array $with = []): Collection
     {
-        $expiredStatus = $this->getCardStatusConstant('expired') ?? 'expired';
-        return Card::where('status', $expiredStatus)->get();
+        return Card::with($with)->where('status', 'expired')->get();
     }
 
     public function isActive(int $id): bool
     {
-        $card = $this->findById($id);
-        if (!$card) return false;
-        $activeStatus = $this->getCardStatusConstant('active') ?? 'active';
-        return $card->status === $activeStatus;
+        return optional($this->findById($id))->status === 'active';
     }
 
     public function isExpired(int $id): bool
     {
         $card = $this->findById($id);
-        return $card && optional($card->expiry_date)->isPast() ?? false;
+        if (!$card || !$card->expiry_date) {
+            return false;
+        }
+        return $card->expiry_date->isPast();
     }
 
-    // ------------------- PIN Operations (بدون تتبع محاولات أو قفل) -------------------
+    // ========== PIN OPERATIONS ==========
     public function verifyPin(int $id, string $pin): bool
     {
         $card = $this->findById($id);
         return $card && Hash::check($pin, $card->pin_hash);
     }
 
-    
-public function setPin(int $id, string $pin): bool
-{
-    $card = $this->findById($id);
-    if (!$card) {
-        return false;
-    }
-
-    return $card->update(['pin_hash' => Hash::make($pin)]);
-}
-
-    public function updatePin(int $id, string $pinHash): bool
+    public function setPin(int $id, string $pin): bool
     {
         $card = $this->findById($id);
-        return $card ? $card->update(['pin_hash' => $pinHash]) : false;
+        return $card ? $card->update(['pin_hash' => Hash::make($pin)]) : false;
     }
 
-    // ------------------- Write -------------------
+    // ========== WRITE OPERATIONS ==========
     public function create(array $data): Card
     {
         return Card::create($data);
@@ -127,7 +111,7 @@ public function setPin(int $id, string $pin): bool
         return $card ? (bool) $card->delete() : false;
     }
 
-    // ------------------- Checks -------------------
+    // ========== CHECKS ==========
     public function existsByNfcUid(string $nfcUid): bool
     {
         return Card::where('nfc_uid', $nfcUid)->exists();

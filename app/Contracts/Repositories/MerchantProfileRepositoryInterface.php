@@ -12,7 +12,7 @@ interface MerchantProfileRepositoryInterface
     // Retrieval
     // ---------------------------------------------------------------
 
-    public function findByUserId(int $userId): ?MerchantProfile;
+    public function getByUserId(int $userId): ?MerchantProfile;
 
     public function getAll(int $perPage = 20): LengthAwarePaginator;
 

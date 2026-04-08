@@ -17,7 +17,7 @@ class TransactionRepository implements TransactionRepositoryInterface
         $this->configRepo = $configRepo;
     }
 
-    // ------------------- دوال مساعدة لقراءة الثوابت من app_config -------------------
+    // ------------------- Helpers -------------------
     protected function getTransactionTypeConstant(string $typeKey): ?string
     {
         return $this->configRepo->getValue('constant', "transaction_type.{$typeKey}");
@@ -29,20 +29,23 @@ class TransactionRepository implements TransactionRepositoryInterface
     }
 
     // ------------------- Retrieval -------------------
-    public function findById(int $id): ?WalletTransaction
+    public function findById(int $id, array $with = []): ?WalletTransaction
     {
-        return WalletTransaction::find($id);
+        return WalletTransaction::with($with)->find($id);
     }
 
-    public function findByUuid(string $uuid): ?WalletTransaction
+    public function getByUuid(string $uuid, array $with = []): ?WalletTransaction
     {
-        return WalletTransaction::where('transaction_uuid', $uuid)->first();
+        return WalletTransaction::with($with)->where('transaction_uuid', $uuid)->first();
     }
 
-    public function getByWalletId(int $walletId, array $filters = [], int $perPage = 20): LengthAwarePaginator
+    public function getByWalletId(int $walletId, array $filters = [], int $perPage = 20, array $with = []): LengthAwarePaginator
     {
-        $query = WalletTransaction::where('sender_wallet_id', $walletId)
-            ->orWhere('receiver_wallet_id', $walletId);
+        $query = WalletTransaction::with($with)
+            ->where(function ($q) use ($walletId) {
+                $q->where('sender_wallet_id', $walletId)
+                  ->orWhere('receiver_wallet_id', $walletId);
+            });
 
         if (!empty($filters['type'])) {
             $query->where('type', $filters['type']);
@@ -50,36 +53,40 @@ class TransactionRepository implements TransactionRepositoryInterface
         if (!empty($filters['status'])) {
             $query->where('status', $filters['status']);
         }
+
         return $query->orderBy('id', 'desc')->paginate($perPage);
     }
 
-    public function getSentByWallet(int $walletId, int $perPage = 20): LengthAwarePaginator
+    public function getSentByWallet(int $walletId, int $perPage = 20, array $with = []): LengthAwarePaginator
     {
-        return WalletTransaction::where('sender_wallet_id', $walletId)
+        return WalletTransaction::with($with)
+            ->where('sender_wallet_id', $walletId)
             ->orderBy('id', 'desc')
             ->paginate($perPage);
     }
 
-    public function getReceivedByWallet(int $walletId, int $perPage = 20): LengthAwarePaginator
+    public function getReceivedByWallet(int $walletId, int $perPage = 20, array $with = []): LengthAwarePaginator
     {
-        return WalletTransaction::where('receiver_wallet_id', $walletId)
+        return WalletTransaction::with($with)
+            ->where('receiver_wallet_id', $walletId)
             ->orderBy('id', 'desc')
             ->paginate($perPage);
     }
 
-    public function getByType(string $type, int $perPage = 20): LengthAwarePaginator
+    public function getByType(string $type, int $perPage = 20, array $with = []): LengthAwarePaginator
     {
-        return WalletTransaction::where('type', $type)->paginate($perPage);
+        return WalletTransaction::with($with)->where('type', $type)->paginate($perPage);
     }
 
-    public function getByStatus(string $status, int $perPage = 20): LengthAwarePaginator
+    public function getByStatus(string $status, int $perPage = 20, array $with = []): LengthAwarePaginator
     {
-        return WalletTransaction::where('status', $status)->paginate($perPage);
+        return WalletTransaction::with($with)->where('status', $status)->paginate($perPage);
     }
 
-    public function getAll(array $filters = [], int $perPage = 20): LengthAwarePaginator
+    public function getAll(array $filters = [], int $perPage = 20, array $with = []): LengthAwarePaginator
     {
-        $query = WalletTransaction::query();
+        $query = WalletTransaction::with($with);
+
         if (!empty($filters['type'])) {
             $query->where('type', $filters['type']);
         }
@@ -89,34 +96,35 @@ class TransactionRepository implements TransactionRepositoryInterface
         if (!empty($filters['sender_wallet_id'])) {
             $query->where('sender_wallet_id', $filters['sender_wallet_id']);
         }
+
         return $query->orderBy('id', 'desc')->paginate($perPage);
     }
 
-    public function getPending(): Collection
+    public function getPending(array $with = []): Collection
     {
         $pendingStatus = $this->getTransactionStatusConstant('pending') ?? 'pending';
-        return WalletTransaction::where('status', $pendingStatus)->get();
+        return WalletTransaction::with($with)->where('status', $pendingStatus)->get();
     }
 
-    // ------------------- الدوال المنقولة من الموديل -------------------
-    public function getCompleted(): Collection
+    public function getCompleted(array $with = []): Collection
     {
         $completedStatus = $this->getTransactionStatusConstant('completed') ?? 'completed';
-        return WalletTransaction::where('status', $completedStatus)->get();
+        return WalletTransaction::with($with)->where('status', $completedStatus)->get();
     }
 
-    public function getFailed(): Collection
+    public function getFailed(array $with = []): Collection
     {
         $failedStatus = $this->getTransactionStatusConstant('failed') ?? 'failed';
-        return WalletTransaction::where('status', $failedStatus)->get();
+        return WalletTransaction::with($with)->where('status', $failedStatus)->get();
     }
 
-    public function getByTransactionType(string $type): Collection
+    public function getByTransactionType(string $type, array $with = []): Collection
     {
         $typeValue = $this->getTransactionTypeConstant($type) ?? $type;
-        return WalletTransaction::where('type', $typeValue)->get();
+        return WalletTransaction::with($with)->where('type', $typeValue)->get();
     }
 
+    // ------------------- Status Checks -------------------
     public function isCompleted(int $id): bool
     {
         $transaction = $this->findById($id);
@@ -220,20 +228,3 @@ class TransactionRepository implements TransactionRepositoryInterface
         return $this->updateStatus($id, $cancelledStatus);
     }
 }
-
-
-
-// -- أنواع المعاملات
-// INSERT INTO app_config (group, key, value, label, meta) VALUES
-// ('constant', 'transaction_type.payment', 'payment', 'دفع', '{"category":"transaction_type"}'),
-// ('constant', 'transaction_type.transfer', 'transfer', 'تحويل', '{"category":"transaction_type"}'),
-// ('constant', 'transaction_type.deposit', 'deposit', 'إيداع', '{"category":"transaction_type"}'),
-// ('constant', 'transaction_type.withdrawal', 'withdrawal', 'سحب', '{"category":"transaction_type"}'),
-// ('constant', 'transaction_type.refund', 'refund', 'استرداد', '{"category":"transaction_type"}');
-
-// -- حالات المعاملات
-// INSERT INTO app_config (group, key, value, label, meta) VALUES
-// ('constant', 'transaction_status.pending', 'pending', 'معلق', '{"category":"transaction_status"}'),
-// ('constant', 'transaction_status.completed', 'completed', 'مكتمل', '{"category":"transaction_status"}'),
-// ('constant', 'transaction_status.failed', 'failed', 'فاشل', '{"category":"transaction_status"}'),
-// ('constant', 'transaction_status.cancelled', 'cancelled', 'ملغي', '{"category":"transaction_status"}');

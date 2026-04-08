@@ -17,37 +17,40 @@ class AgentProfileRepository implements AgentProfileRepositoryInterface
         $this->configRepo = $configRepo;
     }
 
-    // ------------------- دوال مساعدة لقراءة الثوابت من app_config -------------------
+    // ------------------- Helpers -------------------
     protected function getCommissionTypeConstant(string $typeKey): ?string
     {
         return $this->configRepo->getValue('constant', "commission_type.{$typeKey}");
     }
 
     // ------------------- Retrieval -------------------
-    public function findByUserId(int $userId): ?AgentProfile
+    public function getByUserId(int $userId, array $with = []): ?AgentProfile
     {
-        return AgentProfile::find($userId);
+        return AgentProfile::with($with)->where('user_id', $userId)->first();
     }
 
-    public function getAll(int $perPage = 20): LengthAwarePaginator
+    public function getAll(int $perPage = 20, array $with = []): LengthAwarePaginator
     {
-        return AgentProfile::paginate($perPage);
+        return AgentProfile::with($with)->paginate($perPage);
     }
 
-    public function getActive(): Collection
+    public function getActive(array $with = []): Collection
     {
-        return AgentProfile::where('is_active', true)->get();
+        return AgentProfile::with($with)->where('is_active', true)->get();
     }
 
     public function calculateCommission(int $userId, float $amount): float
     {
-        $profile = $this->findByUserId($userId);
-        if (!$profile) return 0.0;
+        $profile = $this->getByUserId($userId);
+        if (!$profile) {
+            return 0.0;
+        }
 
         $percentageType = $this->getCommissionTypeConstant('percentage') ?? 'percentage';
         if ($profile->commission_type === $percentageType) {
             return round($amount * ($profile->commission_value / 100), 2);
         }
+
         return (float) $profile->commission_value;
     }
 
@@ -60,8 +63,10 @@ class AgentProfileRepository implements AgentProfileRepositoryInterface
 
     public function update(int $userId, array $data): bool
     {
-        $profile = $this->findByUserId($userId);
-        if (!$profile) return false;
+        $profile = $this->getByUserId($userId);
+        if (!$profile) {
+            return false;
+        }
         return $profile->update($data);
     }
 
@@ -80,8 +85,10 @@ class AgentProfileRepository implements AgentProfileRepositoryInterface
 
     public function delete(int $userId): bool
     {
-        $profile = $this->findByUserId($userId);
-        if (!$profile) return false;
+        $profile = $this->getByUserId($userId);
+        if (!$profile) {
+            return false;
+        }
         return (bool) $profile->delete();
     }
 
@@ -93,7 +100,7 @@ class AgentProfileRepository implements AgentProfileRepositoryInterface
 
     public function isActive(int $userId): bool
     {
-        $profile = $this->findByUserId($userId);
+        $profile = $this->getByUserId($userId);
         return $profile && $profile->is_active;
     }
 }

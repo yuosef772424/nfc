@@ -9,61 +9,49 @@ use Illuminate\Support\Facades\Cache;
 
 class AppConfigRepository implements AppConfigRepositoryInterface
 {
-    protected string $cacheKey = 'app_config_all';
+    public const CACHE_KEY = 'app_config_all';
 
-    // جلب قيمة محددة
+    /**
+     * Get a single configuration value with optional meta filtering.
+     */
     public function getValue(string $group, string $key, array $metaFilters = []): mixed
     {
         $all = $this->getAllGrouped();
         $items = $all[$group] ?? [];
 
         foreach ($items as $item) {
-            if ($item['key'] !== $key) continue;
-
-            // التحقق من توافق meta filters
-            $metaMatch = true;
-            foreach ($metaFilters as $k => $v) {
-                if (($item['meta'][$k] ?? null) != $v) {
-                    $metaMatch = false;
-                    break;
-                }
+            if ($item['key'] !== $key) {
+                continue;
             }
-            if ($metaMatch) {
+            if ($this->matchesMetaFilters($item['meta'], $metaFilters)) {
                 return $item['casted_value'];
             }
         }
+
         return null;
     }
 
-    // جلب مجموعة كاملة مع فلترة meta
+    /**
+     * Get entire group with optional meta filtering.
+     */
     public function getGroup(string $group, array $metaFilters = []): Collection
     {
-        $all = $this->getAllGrouped();
-        $items = $all[$group] ?? [];
-
-        if (empty($metaFilters)) {
-            return collect($items);
-        }
-
-        return collect($items)->filter(function ($item) use ($metaFilters) {
-            foreach ($metaFilters as $k => $v) {
-                if (($item['meta'][$k] ?? null) != $v) return false;
-            }
-            return true;
-        })->values();
+        return collect($this->getAllGrouped()[$group] ?? [])
+            ->filter(fn($item) => $this->matchesMetaFilters($item['meta'], $metaFilters))
+            ->values();
     }
 
-    // جلب كل الإعدادات مع التجميع (يُخزن في cache)
+    /**
+     * Get all configurations grouped (cached forever until cleared).
+     */
     public function getAllGrouped(): array
     {
-        return Cache::rememberForever($this->cacheKey, function () {
-            $configs = AppConfig::where('is_active', true)
+        return Cache::rememberForever(self::CACHE_KEY, function () {
+            return AppConfig::where('is_active', true)
                 ->orderBy('sort_order')
-                ->get();
-
-            $grouped = [];
-            foreach ($configs as $config) {
-                $grouped[$config->group][] = [
+                ->get(['group', 'key', 'value', 'data_type', 'label', 'sort_order', 'meta'])
+                ->groupBy('group')
+                ->transform(fn($group) => $group->map(fn($config) => [
                     'key'          => $config->key,
                     'value'        => $config->value,
                     'casted_value' => $config->casted_value,
@@ -71,21 +59,17 @@ class AppConfigRepository implements AppConfigRepositoryInterface
                     'label'        => $config->label,
                     'sort_order'   => $config->sort_order,
                     'meta'         => $config->meta,
-                ];
-            }
-            return $grouped;
+                ]));
         });
     }
 
-    // إنشاء أو تحديث إعداد
+    /**
+     * Create or update a configuration and clear cache.
+     */
     public function set(string $group, string $key, mixed $value, array $meta = []): AppConfig
     {
         $dataType = $this->detectDataType($value);
-        $stringValue = match($dataType) {
-            'json'    => json_encode($value),
-            'boolean' => $value ? 'true' : 'false',
-            default   => (string) $value,
-        };
+        $stringValue = $this->encodeValue($value, $dataType);
 
         $config = AppConfig::updateOrCreate(
             ['group' => $group, 'key' => $key],
@@ -101,22 +85,46 @@ class AppConfigRepository implements AppConfigRepositoryInterface
         return $config;
     }
 
-    // مسح الكاش
+    /**
+     * Clear all cached configurations.
+     */
     public function clearCache(): void
     {
-        Cache::forget($this->cacheKey);
+        Cache::forget(self::CACHE_KEY);
     }
 
-    // كشف نوع البيانات تلقائياً
+    // ------------------- Private Helpers -------------------
+
     private function detectDataType(mixed $value): string
-{
-    if (is_bool($value))    return 'boolean';
-    if (is_array($value))   return 'json';
-    if (is_int($value) || is_float($value)) return 'number';
+    {
+        return match (true) {
+            is_bool($value)        => 'boolean',
+            is_array($value)       => 'json',
+            is_int($value) || is_float($value) => 'number',
+            default                => 'string',
+        };
+    }
 
-    // string رقمية تبقى string — فقط الأرقام الحرفية الصريحة تُصنَّف number
-    return 'string';
-}
+    private function encodeValue(mixed $value, string $dataType): string
+    {
+        return match ($dataType) {
+            'json'    => json_encode($value),
+            'boolean' => $value ? 'true' : 'false',
+            default   => (string) $value,
+        };
+    }
 
+    private function matchesMetaFilters(array $itemMeta, array $metaFilters): bool
+    {
+        if (empty($metaFilters)) {
+            return true;
+        }
 
+        foreach ($metaFilters as $key => $value) {
+            if (!isset($itemMeta[$key]) || $itemMeta[$key] != $value) {
+                return false;
+            }
+        }
+        return true;
+    }
 }

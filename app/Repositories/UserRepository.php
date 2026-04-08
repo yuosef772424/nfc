@@ -17,7 +17,7 @@ class UserRepository implements UserRepositoryInterface
         $this->configRepo = $configRepo;
     }
 
-    // ------------------- دوال مساعدة لقراءة الثوابت من app_config -------------------
+    // ------------------- Helpers -------------------
     public function getUserTypeConstant(string $typeKey): ?string
     {
         return $this->configRepo->getValue('constant', "user_type.{$typeKey}");
@@ -34,73 +34,79 @@ class UserRepository implements UserRepositoryInterface
         return $group->pluck('value', 'key')->toArray();
     }
 
-    // ------------------- دوال الاستعلام الأساسية -------------------
-    public function findById(int $id): ?User
+    // ------------------- Basic Queries -------------------
+    public function findById(int $id, array $with = []): ?User
     {
-        return User::find($id);
+        return User::with($with)->find($id);
     }
 
-    public function findByUuid(string $uuid): ?User
+    public function getByPhone(string $phone, array $with = []): ?User
     {
-        return User::where('uuid', $uuid)->first();
+        return User::with($with)->where('phone', $phone)->first();
     }
 
-    public function findByPhone(string $phone): ?User
+    public function getByEmail(string $email, array $with = []): ?User
     {
-        return User::where('phone', $phone)->first();
+        return User::with($with)->where('email', $email)->first();
     }
 
-    public function findByEmail(string $email): ?User
+    public function getByUuid(string $uuid, array $with = []): ?User
     {
-        return User::where('email', $email)->first();
+        return User::with($with)->where('uuid', $uuid)->first();
     }
 
+    /**
+     * @deprecated Use findById($id, $relations) instead
+     */
     public function findWithRelations(int $id, array $relations): ?User
     {
         return User::with($relations)->find($id);
     }
 
-    public function getAll(array $filters = [], int $perPage = 20): LengthAwarePaginator
+    public function getAll(array $filters = [], int $perPage = 20, array $with = []): LengthAwarePaginator
     {
-        $query = User::query();
+        $query = User::with($with);
+
         if (!empty($filters['user_type'])) {
             $query->where('user_type', $filters['user_type']);
         }
         if (!empty($filters['status'])) {
             $query->where('status', $filters['status']);
         }
+
         return $query->paginate($perPage);
     }
 
-    public function getByType(string $userType, int $perPage = 20): LengthAwarePaginator
+    public function getByType(string $userType, int $perPage = 20, array $with = []): LengthAwarePaginator
     {
-        return User::where('user_type', $userType)->paginate($perPage);
+        return User::with($with)->where('user_type', $userType)->paginate($perPage);
     }
 
-    public function getActiveUsers(int $perPage = 20): LengthAwarePaginator
+    public function getActiveUsers(int $perPage = 20, array $with = []): LengthAwarePaginator
     {
         $activeStatus = $this->getStatusConstant('active') ?? 'active';
-        return User::where('status', $activeStatus)->paginate($perPage);
+        return User::with($with)->where('status', $activeStatus)->paginate($perPage);
     }
 
-    // ------------------- الدوال المنقولة من الموديل (تعتمد على app_config) -------------------
-    public function getVerified(): Collection
+    // ------------------- Collections -------------------
+    public function getVerified(array $with = []): Collection
     {
-        return User::where('is_verified', true)->get();
+        return User::with($with)->where('is_verified', true)->get();
     }
 
-    public function getAgents(): Collection
+    public function getAgents(array $with = []): Collection
     {
         $agentType = $this->getUserTypeConstant('agent') ?? 'agent';
-        return User::where('user_type', $agentType)->get();
+        return User::with($with)->where('user_type', $agentType)->get();
     }
 
-    public function getMerchants(): Collection
+    public function getMerchants(array $with = []): Collection
     {
         $merchantType = $this->getUserTypeConstant('merchant') ?? 'merchant';
-        return User::where('user_type', $merchantType)->get();
+        return User::with($with)->where('user_type', $merchantType)->get();
     }
 
+    // ------------------- Checks -------------------
     public function isAgent(int $id): bool
     {
         $user = $this->findById($id);
@@ -131,7 +137,7 @@ class UserRepository implements UserRepositoryInterface
         return $user->status === $suspendedStatus;
     }
 
-    // ------------------- دوال الكتابة -------------------
+    // ------------------- Write Operations -------------------
     public function create(array $data): User
     {
         return User::create($data);
@@ -161,7 +167,7 @@ class UserRepository implements UserRepositoryInterface
         return (bool) $user->delete();
     }
 
-    // ------------------- دوال التحقق -------------------
+    // ------------------- Existence Checks -------------------
     public function existsByPhone(string $phone): bool
     {
         return User::where('phone', $phone)->exists();

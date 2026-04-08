@@ -10,7 +10,7 @@ interface PhysicalDeviceDetailRepositoryInterface
     // Retrieval
     // ---------------------------------------------------------------
 
-    public function findByDeviceId(int $deviceId): ?PhysicalDeviceDetail;
+    public function getByDeviceId(int $deviceId): ?PhysicalDeviceDetail;
 
     // ---------------------------------------------------------------
     // Write

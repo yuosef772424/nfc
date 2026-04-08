@@ -18,37 +18,39 @@ class WalletRepository implements WalletRepositoryInterface
         $this->configRepo = $configRepo;
     }
 
-    // ------------------- دوال مساعدة لقراءة الثوابت من app_config -------------------
+    // ------------------- Helpers -------------------
     protected function getWalletStatusConstant(string $statusKey): ?string
     {
         return $this->configRepo->getValue('constant', "wallet_status.{$statusKey}");
     }
 
     // ------------------- Retrieval -------------------
-    public function findById(int $id): ?Wallet
+    public function findById(int $id, array $with = []): ?Wallet
     {
-        return Wallet::find($id);
+        return Wallet::with($with)->find($id);
     }
 
-    public function findByUserId(int $userId): ?Wallet
+    public function getByUserId(int $userId, array $with = []): ?Wallet
     {
-        return Wallet::where('user_id', $userId)->first();
+        return Wallet::with($with)->where('user_id', $userId)->first();
     }
 
-    public function getAllByUserId(int $userId): Collection
+    public function getAllByUserId(int $userId, array $with = []): Collection
     {
-        return Wallet::where('user_id', $userId)->get();
+        return Wallet::with($with)->where('user_id', $userId)->get();
     }
 
-    public function getAll(array $filters = [], int $perPage = 20): LengthAwarePaginator
+    public function getAll(array $filters = [], int $perPage = 20, array $with = []): LengthAwarePaginator
     {
-        $query = Wallet::query();
+        $query = Wallet::with($with);
+
         if (!empty($filters['status'])) {
             $query->where('status', $filters['status']);
         }
         if (!empty($filters['currency'])) {
             $query->where('currency', $filters['currency']);
         }
+
         return $query->paginate($perPage);
     }
 
@@ -93,29 +95,25 @@ class WalletRepository implements WalletRepositoryInterface
         return (bool) Wallet::where('id', $id)->decrement('pending_balance', $amount);
     }
 
-    // الملف: app/Repositories/WalletRepository.php
-// أضف use Illuminate\Support\Facades\DB; في أعلى الملف إن لم يكن موجوداً
-// استبدل الدالة الموجودة بين السطر الذي يبدأ بـ: public function settlePending
+    public function settlePending(int $id, float $amount): bool
+    {
+        return DB::transaction(function () use ($id, $amount): bool {
+            $wallet = Wallet::where('id', $id)->lockForUpdate()->first();
 
-public function settlePending(int $id, float $amount): bool
-{
-    return DB::transaction(function () use ($id, $amount): bool {
-        $wallet = Wallet::where('id', $id)->lockForUpdate()->first();
+            if (!$wallet) {
+                return false;
+            }
 
-        if (!$wallet) {
-            return false;
-        }
+            if ($wallet->pending_balance < $amount) {
+                return false;
+            }
 
-        if ($wallet->pending_balance < $amount) {
-            return false;
-        }
-
-        return $wallet->update([
-            'pending_balance'   => $wallet->pending_balance - $amount,
-            'available_balance' => $wallet->available_balance + $amount,
-        ]);
-    });
-}
+            return $wallet->update([
+                'pending_balance'   => $wallet->pending_balance - $amount,
+                'available_balance' => $wallet->available_balance + $amount,
+            ]);
+        });
+    }
 
     public function delete(int $id): bool
     {
@@ -133,7 +131,9 @@ public function settlePending(int $id, float $amount): bool
     public function isActive(int $id): bool
     {
         $wallet = $this->findById($id);
-        if (!$wallet) return false;
+        if (!$wallet) {
+            return false;
+        }
         $activeStatus = $this->getWalletStatusConstant('active') ?? 'active';
         return $wallet->status === $activeStatus;
     }

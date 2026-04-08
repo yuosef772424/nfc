@@ -11,7 +11,7 @@ interface UserKycRepositoryInterface
     // Retrieval
     // ---------------------------------------------------------------
 
-    public function getByUserId(int $userId): ?UserKyc;
+    public function findByUserId(int $userId): ?UserKyc;
 
     public function getPending(int $perPage = 20): LengthAwarePaginator;   // تعوض scopePending
 

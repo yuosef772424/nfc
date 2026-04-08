@@ -17,7 +17,7 @@ class NotificationRepository implements NotificationRepositoryInterface
         $this->configRepo = $configRepo;
     }
 
-    // ------------------- دوال مساعدة لقراءة الثوابت من app_config (اختياري) -------------------
+    // ------------------- Helpers -------------------
     protected function getNotificationTypeConstant(string $typeKey): ?string
     {
         return $this->configRepo->getValue('constant', "notification_type.{$typeKey}");
@@ -29,26 +29,28 @@ class NotificationRepository implements NotificationRepositoryInterface
     }
 
     // ------------------- Retrieval -------------------
-    public function findById(int $id): ?Notification
+    public function findById(int $id, array $with = []): ?Notification
     {
-        return Notification::find($id);
+        return Notification::with($with)->find($id);
     }
 
-    public function getByUserId(int $userId, int $perPage = 20): LengthAwarePaginator
+    public function getByUserId(int $userId, int $perPage = 20, array $with = []): LengthAwarePaginator
     {
-        return Notification::where('user_id', $userId)->paginate($perPage);
+        return Notification::with($with)->where('user_id', $userId)->paginate($perPage);
     }
 
-    public function getUnreadByUserId(int $userId): Collection
+    public function getUnreadByUserId(int $userId, array $with = []): Collection
     {
-        return Notification::where('user_id', $userId)
+        return Notification::with($with)
+            ->where('user_id', $userId)
             ->where('is_read', false)
             ->get();
     }
 
-    public function getByType(int $userId, string $type, int $perPage = 20): LengthAwarePaginator
+    public function getByType(int $userId, string $type, int $perPage = 20, array $with = []): LengthAwarePaginator
     {
-        return Notification::where('user_id', $userId)
+        return Notification::with($with)
+            ->where('user_id', $userId)
             ->where('type', $type)
             ->paginate($perPage);
     }
@@ -63,7 +65,6 @@ class NotificationRepository implements NotificationRepositoryInterface
     // ------------------- Write -------------------
     public function create(int $userId, string $type, string $title, string $message, string $channel = 'push', ?array $data = null): Notification
     {
-        // يمكن جلب القيمة الافتراضية للقناة من config إذا أردت
         $defaultChannel = $this->getNotificationChannelConstant('push') ?? 'push';
         $finalChannel = $channel ?: $defaultChannel;
 
@@ -81,7 +82,9 @@ class NotificationRepository implements NotificationRepositoryInterface
     public function markAsRead(int $id): bool
     {
         $notification = $this->findById($id);
-        if (!$notification) return false;
+        if (!$notification) {
+            return false;
+        }
         return $notification->update(['is_read' => true]);
     }
 
@@ -95,7 +98,9 @@ class NotificationRepository implements NotificationRepositoryInterface
     public function delete(int $id): bool
     {
         $notification = $this->findById($id);
-        if (!$notification) return false;
+        if (!$notification) {
+            return false;
+        }
         return (bool) $notification->delete();
     }
 

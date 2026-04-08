@@ -11,7 +11,7 @@ interface MobileDeviceDetailRepositoryInterface
     // Retrieval
     // ---------------------------------------------------------------
 
-    public function getByDeviceId(int $deviceId): ?MobileDeviceDetail;
+    public function findByDeviceId(int $deviceId): ?MobileDeviceDetail;
 
     public function getByFingerprint(string $fingerprint): ?MobileDeviceDetail;
 

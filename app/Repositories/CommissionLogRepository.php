@@ -20,7 +20,7 @@ class CommissionLogRepository implements CommissionLogRepositoryInterface
         $this->configRepo = $configRepo;
     }
 
-    // ------------------- دوال مساعدة لقراءة الثوابت من app_config -------------------
+    // ------------------- Helpers -------------------
     protected function getCommissionStatusConstant(string $statusKey): ?string
     {
         return $this->configRepo->getValue('constant', "commission_status.{$statusKey}");
@@ -32,38 +32,42 @@ class CommissionLogRepository implements CommissionLogRepositoryInterface
     }
 
     // ------------------- Retrieval -------------------
-    public function findById(int $id): ?CommissionLog
+    public function findById(int $id, array $with = []): ?CommissionLog
     {
-        return CommissionLog::find($id);
+        return CommissionLog::with($with)->find($id);
     }
 
-    public function getByRecipient(int $recipientId, string $recipientType, int $perPage = 20): LengthAwarePaginator
+    public function getByRecipient(int $recipientId, string $recipientType, int $perPage = 20, array $with = []): LengthAwarePaginator
     {
-        return CommissionLog::where('recipient_id', $recipientId)
+        return CommissionLog::with($with)
+            ->where('recipient_id', $recipientId)
             ->where('recipient_type', $recipientType)
             ->paginate($perPage);
     }
 
-    public function getByReference(string $referenceType, int $referenceId): Collection
+    public function getByReference(string $referenceType, int $referenceId, array $with = []): Collection
     {
-        return CommissionLog::where('reference_type', $referenceType)
+        return CommissionLog::with($with)
+            ->where('reference_type', $referenceType)
             ->where('reference_id', $referenceId)
             ->get();
     }
 
-    public function getPendingByAgent(int $agentId): Collection
+    public function getPendingByAgent(int $agentId, array $with = []): Collection
     {
         $agentType = $this->getRecipientTypeConstant('agent') ?? 'agent';
         $pendingStatus = $this->getCommissionStatusConstant('pending') ?? 'pending';
-        return CommissionLog::where('recipient_type', $agentType)
+        return CommissionLog::with($with)
+            ->where('recipient_type', $agentType)
             ->where('recipient_id', $agentId)
             ->where('status', $pendingStatus)
             ->get();
     }
 
-    public function getAll(array $filters = [], int $perPage = 20): LengthAwarePaginator
+    public function getAll(array $filters = [], int $perPage = 20, array $with = []): LengthAwarePaginator
     {
-        $query = CommissionLog::query();
+        $query = CommissionLog::with($with);
+
         if (!empty($filters['status'])) {
             $query->where('status', $filters['status']);
         }
@@ -73,19 +77,21 @@ class CommissionLogRepository implements CommissionLogRepositoryInterface
         if (!empty($filters['recipient_id'])) {
             $query->where('recipient_id', $filters['recipient_id']);
         }
+
         return $query->paginate($perPage);
     }
 
-    public function getPending(): Collection
+    public function getPending(array $with = []): Collection
     {
         $pendingStatus = $this->getCommissionStatusConstant('pending') ?? 'pending';
-        return CommissionLog::where('status', $pendingStatus)->get();
+        return CommissionLog::with($with)->where('status', $pendingStatus)->get();
     }
 
-    public function getForAgent(int $agentId): Collection
+    public function getForAgent(int $agentId, array $with = []): Collection
     {
         $agentType = $this->getRecipientTypeConstant('agent') ?? 'agent';
-        return CommissionLog::where('recipient_type', $agentType)
+        return CommissionLog::with($with)
+            ->where('recipient_type', $agentType)
             ->where('recipient_id', $agentId)
             ->get();
     }
@@ -93,11 +99,14 @@ class CommissionLogRepository implements CommissionLogRepositoryInterface
     public function getReference(int $logId): ?Model
     {
         $log = $this->findById($logId);
-        if (!$log) return null;
+        if (!$log) {
+            return null;
+        }
 
-        $withdrawalRef = CommissionLog::REF_WITHDRAWAL; // هذه ثابتة تقنية يمكن بقاؤها أو جلبها من config
+        $withdrawalRef = CommissionLog::REF_WITHDRAWAL;
         $transactionRef = CommissionLog::REF_TRANSACTION;
-        return match($log->reference_type) {
+
+        return match ($log->reference_type) {
             $withdrawalRef  => Withdrawal::find($log->reference_id),
             $transactionRef => WalletTransaction::find($log->reference_id),
             default => null,
@@ -107,7 +116,9 @@ class CommissionLogRepository implements CommissionLogRepositoryInterface
     public function markPaid(int $id): bool
     {
         $log = $this->findById($id);
-        if (!$log) return false;
+        if (!$log) {
+            return false;
+        }
         $paidStatus = $this->getCommissionStatusConstant('paid') ?? 'paid';
         return $log->update([
             'status'  => $paidStatus,
@@ -118,7 +129,9 @@ class CommissionLogRepository implements CommissionLogRepositoryInterface
     public function markCancelled(int $id): bool
     {
         $log = $this->findById($id);
-        if (!$log) return false;
+        if (!$log) {
+            return false;
+        }
         $cancelledStatus = $this->getCommissionStatusConstant('cancelled') ?? 'cancelled';
         return $log->update(['status' => $cancelledStatus]);
     }

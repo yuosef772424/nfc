@@ -5,12 +5,11 @@ namespace App\Repositories;
 use App\Models\AuditLog;
 use App\Contracts\Repositories\AuditLogRepositoryInterface;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
-use Illuminate\Database\Eloquent\Collection;
 
 class AuditLogRepository implements AuditLogRepositoryInterface
 {
     /**
-     * دالة واحدة فقط لتسجيل السجل
+     * Create a single audit log entry
      */
     public function create(
         string $action,
@@ -26,36 +25,49 @@ class AuditLogRepository implements AuditLogRepositoryInterface
             'action'     => $action,
             'entity'     => $entity,
             'entity_id'  => $entityId,
-            'old_data'   => $oldData,    // Model سيكاسته تلقائياً
+            'old_data'   => $oldData,
             'new_data'   => $newData,
             'ip_address' => $ipAddress,
         ]);
     }
 
     // ========== RETRIEVAL ==========
-    public function findById(int $id): ?AuditLog
+    public function findById(int $id, array $with = []): ?AuditLog
     {
-        return AuditLog::find($id);
+        return AuditLog::with($with)->find($id);
     }
 
-    public function getByUserId(int $userId, int $perPage = 20): LengthAwarePaginator
+    public function getByUserId(int $userId, int $perPage = 20, array $with = []): LengthAwarePaginator
     {
-        return AuditLog::where('user_id', $userId)
-            ->latest('id')
+        return AuditLog::with($with)
+            ->where('user_id', $userId)
+            ->latest('created_at')
             ->paginate($perPage);
     }
 
-    public function getByEntity(string $entity, int $entityId, int $perPage = 20): LengthAwarePaginator
+    public function getByEntity(string $entity, int $entityId, int $perPage = 20, array $with = []): LengthAwarePaginator
     {
-        return AuditLog::where('entity', $entity)
+        return AuditLog::with($with)
+            ->where('entity', $entity)
             ->where('entity_id', $entityId)
-            ->latest('id')
+            ->latest('created_at')
             ->paginate($perPage);
     }
 
-    public function getAll(array $filters = [], int $perPage = 20): LengthAwarePaginator
+    public function getByAction(string $action, int $perPage = 20, array $with = []): LengthAwarePaginator
     {
-        $query = AuditLog::query();
+        return AuditLog::with($with)
+            ->where('action', $action)
+            ->latest('created_at')
+            ->paginate($perPage);
+    }
+
+    /**
+     * Get all audit logs with optional filters and eager loading.
+     */
+    public function getAll(array $filters = [], int $perPage = 20, array $with = []): LengthAwarePaginator
+    {
+        $query = AuditLog::with($with);
 
         if (!empty($filters['user_id'])) {
             $query->where('user_id', $filters['user_id']);
@@ -66,8 +78,11 @@ class AuditLogRepository implements AuditLogRepositoryInterface
         if (!empty($filters['entity'])) {
             $query->where('entity', $filters['entity']);
         }
+        if (!empty($filters['entity_id'])) {
+            $query->where('entity_id', $filters['entity_id']);
+        }
 
-        return $query->latest('id')->paginate($perPage);
+        return $query->latest('created_at')->paginate($perPage);
     }
 
     // ========== CLEANUP ==========

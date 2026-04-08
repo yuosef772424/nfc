@@ -18,50 +18,56 @@ class LedgerEntryRepository implements LedgerEntryRepositoryInterface
         $this->configRepo = $configRepo;
     }
 
-    // ------------------- دوال مساعدة لقراءة الثوابت من app_config -------------------
+    // ------------------- Helpers -------------------
     protected function getEntryTypeConstant(string $typeKey): ?string
     {
         return $this->configRepo->getValue('constant', "ledger_entry_type.{$typeKey}");
     }
 
     // ------------------- Retrieval -------------------
-    public function findById(int $id): ?LedgerEntry
+    public function findById(int $id, array $with = []): ?LedgerEntry
     {
-        return LedgerEntry::find($id);
+        return LedgerEntry::with($with)->find($id);
     }
 
-    public function getByWalletId(int $walletId, int $perPage = 50): LengthAwarePaginator
+    public function getByWalletId(int $walletId, int $perPage = 50, array $with = []): LengthAwarePaginator
     {
-        return LedgerEntry::where('wallet_id', $walletId)
+        return LedgerEntry::with($with)
+            ->where('wallet_id', $walletId)
             ->orderBy('id')
             ->paginate($perPage);
     }
 
-    public function getByTransactionId(int $transactionId): Collection
+    public function getByTransactionId(int $transactionId, array $with = []): Collection
     {
-        return LedgerEntry::where('transaction_id', $transactionId)->get();
+        return LedgerEntry::with($with)
+            ->where('transaction_id', $transactionId)
+            ->get();
     }
 
-    public function getLatestByWallet(int $walletId): ?LedgerEntry
+    public function getLatestByWallet(int $walletId, array $with = []): ?LedgerEntry
     {
-        return LedgerEntry::where('wallet_id', $walletId)
+        return LedgerEntry::with($with)
+            ->where('wallet_id', $walletId)
             ->orderBy('id', 'desc')
             ->first();
     }
 
-    public function getDebits(int $walletId): Collection
+    public function getDebits(int $walletId, array $with = []): Collection
     {
         $debitType = $this->getEntryTypeConstant('debit') ?? 'debit';
-        return LedgerEntry::where('wallet_id', $walletId)
+        return LedgerEntry::with($with)
+            ->where('wallet_id', $walletId)
             ->where('entry_type', $debitType)
             ->orderBy('id')
             ->get();
     }
 
-    public function getCredits(int $walletId): Collection
+    public function getCredits(int $walletId, array $with = []): Collection
     {
         $creditType = $this->getEntryTypeConstant('credit') ?? 'credit';
-        return LedgerEntry::where('wallet_id', $walletId)
+        return LedgerEntry::with($with)
+            ->where('wallet_id', $walletId)
             ->where('entry_type', $creditType)
             ->orderBy('id')
             ->get();
@@ -70,7 +76,9 @@ class LedgerEntryRepository implements LedgerEntryRepositoryInterface
     public function isDebit(int $id): bool
     {
         $entry = $this->findById($id);
-        if (!$entry) return false;
+        if (!$entry) {
+            return false;
+        }
         $debitType = $this->getEntryTypeConstant('debit') ?? 'debit';
         return $entry->entry_type === $debitType;
     }
@@ -78,27 +86,28 @@ class LedgerEntryRepository implements LedgerEntryRepositoryInterface
     public function isCredit(int $id): bool
     {
         $entry = $this->findById($id);
-        if (!$entry) return false;
+        if (!$entry) {
+            return false;
+        }
         $creditType = $this->getEntryTypeConstant('credit') ?? 'credit';
         return $entry->entry_type === $creditType;
     }
 
     // ------------------- Aggregates -------------------
+    public function calculateBalance(int $walletId): float
+    {
+        $debitType  = $this->getEntryTypeConstant('debit')  ?? 'debit';
+        $creditType = $this->getEntryTypeConstant('credit') ?? 'credit';
 
-public function calculateBalance(int $walletId): float
-{
-    $debitType  = $this->getEntryTypeConstant('debit')  ?? 'debit';
-    $creditType = $this->getEntryTypeConstant('credit') ?? 'credit';
+        $balance = LedgerEntry::where('wallet_id', $walletId)
+            ->selectRaw(
+                'SUM(CASE WHEN entry_type = ? THEN amount WHEN entry_type = ? THEN -amount ELSE 0 END) as balance',
+                [$creditType, $debitType]
+            )
+            ->value('balance');
 
-    $balance = LedgerEntry::where('wallet_id', $walletId)
-        ->selectRaw(
-            'SUM(CASE WHEN entry_type = ? THEN amount WHEN entry_type = ? THEN -amount ELSE 0 END) as balance',
-            [$creditType, $debitType]
-        )
-        ->value('balance');
-
-    return (float) ($balance ?? 0.0);
-}
+        return (float) ($balance ?? 0.0);
+    }
 
     public function sumCredits(int $walletId): float
     {

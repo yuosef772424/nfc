@@ -19,7 +19,7 @@ class NfcDeviceRepository implements NfcDeviceRepositoryInterface
         $this->configRepo = $configRepo;
     }
 
-    // ------------------- دوال مساعدة لقراءة الثوابت من app_config -------------------
+    // ------------------- Helpers -------------------
     protected function getDeviceTypeConstant(string $typeKey): ?string
     {
         return $this->configRepo->getValue('constant', "device_type.{$typeKey}");
@@ -31,60 +31,64 @@ class NfcDeviceRepository implements NfcDeviceRepositoryInterface
     }
 
     // ------------------- Retrieval -------------------
-    public function findById(int $id): ?NfcDevice
+    public function getByUuid(string $uuid, array $with = []): ?NfcDevice
     {
-        return NfcDevice::find($id);
+        return NfcDevice::with($with)->where('device_uuid', $uuid)->first();
     }
 
-    public function findByUuid(string $uuid): ?NfcDevice
+    public function findById(int $id, array $with = []): ?NfcDevice
     {
-        return NfcDevice::where('device_uuid', $uuid)->first();
+        return NfcDevice::with($with)->find($id);
     }
 
-    public function getByUserId(int $userId): Collection
+    public function getByUserId(int $userId, array $with = []): Collection
     {
-        return NfcDevice::where('user_id', $userId)->get();
+        return NfcDevice::with($with)->where('user_id', $userId)->get();
     }
 
-    public function getByType(string $deviceType, int $perPage = 20): LengthAwarePaginator
+    public function getByType(string $deviceType, int $perPage = 20, array $with = []): LengthAwarePaginator
     {
-        return NfcDevice::where('device_type', $deviceType)->paginate($perPage);
+        return NfcDevice::with($with)->where('device_type', $deviceType)->paginate($perPage);
     }
 
-    public function getAll(array $filters = [], int $perPage = 20): LengthAwarePaginator
+    public function getAll(array $filters = [], int $perPage = 20, array $with = []): LengthAwarePaginator
     {
-        $query = NfcDevice::query();
+        $query = NfcDevice::with($with);
+
         if (!empty($filters['status'])) {
             $query->where('status', $filters['status']);
         }
         if (!empty($filters['device_type'])) {
             $query->where('device_type', $filters['device_type']);
         }
+
         return $query->paginate($perPage);
     }
 
-    public function getActive(): Collection
+    public function getActive(array $with = []): Collection
     {
         $activeStatus = $this->getDeviceStatusConstant('active') ?? 'active';
-        return NfcDevice::where('status', $activeStatus)->get();
+        return NfcDevice::with($with)->where('status', $activeStatus)->get();
     }
 
-    public function getPhysical(): Collection
+    public function getPhysical(array $with = []): Collection
     {
         $physicalType = $this->getDeviceTypeConstant('physical') ?? 'physical';
-        return NfcDevice::where('device_type', $physicalType)->get();
+        return NfcDevice::with($with)->where('device_type', $physicalType)->get();
     }
 
-    public function getMobile(): Collection
+    public function getMobile(array $with = []): Collection
     {
         $mobileType = $this->getDeviceTypeConstant('mobile') ?? 'mobile';
-        return NfcDevice::where('device_type', $mobileType)->get();
+        return NfcDevice::with($with)->where('device_type', $mobileType)->get();
     }
 
     public function isPhysical(int $id): bool
     {
         $device = $this->findById($id);
-        if (!$device) return false;
+        if (!$device) {
+            return false;
+        }
         $physicalType = $this->getDeviceTypeConstant('physical') ?? 'physical';
         return $device->device_type === $physicalType;
     }
@@ -92,7 +96,9 @@ class NfcDeviceRepository implements NfcDeviceRepositoryInterface
     public function isMobile(int $id): bool
     {
         $device = $this->findById($id);
-        if (!$device) return false;
+        if (!$device) {
+            return false;
+        }
         $mobileType = $this->getDeviceTypeConstant('mobile') ?? 'mobile';
         return $device->device_type === $mobileType;
     }
@@ -100,14 +106,16 @@ class NfcDeviceRepository implements NfcDeviceRepositoryInterface
     public function getDetails(int $id): ?\Illuminate\Database\Eloquent\Model
     {
         $device = $this->findById($id);
-        if (!$device) return null;
+        if (!$device) {
+            return null;
+        }
 
         $physicalType = $this->getDeviceTypeConstant('physical') ?? 'physical';
         if ($device->device_type === $physicalType) {
             return PhysicalDeviceDetail::where('device_id', $id)->first();
-        } else {
-            return MobileDeviceDetail::where('device_id', $id)->first();
         }
+
+        return MobileDeviceDetail::where('device_id', $id)->first();
     }
 
     // ------------------- Write -------------------
@@ -125,14 +133,18 @@ class NfcDeviceRepository implements NfcDeviceRepositoryInterface
     public function update(int $id, array $data): bool
     {
         $device = $this->findById($id);
-        if (!$device) return false;
+        if (!$device) {
+            return false;
+        }
         return $device->update($data);
     }
 
     public function delete(int $id): bool
     {
         $device = $this->findById($id);
-        if (!$device) return false;
+        if (!$device) {
+            return false;
+        }
         return (bool) $device->delete();
     }
 
@@ -140,7 +152,9 @@ class NfcDeviceRepository implements NfcDeviceRepositoryInterface
     public function isActive(int $id): bool
     {
         $device = $this->findById($id);
-        if (!$device) return false;
+        if (!$device) {
+            return false;
+        }
         $activeStatus = $this->getDeviceStatusConstant('active') ?? 'active';
         return $device->status === $activeStatus;
     }

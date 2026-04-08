@@ -16,9 +16,9 @@ class PhysicalDeviceDetailRepository implements PhysicalDeviceDetailRepositoryIn
     }
 
     // ------------------- Retrieval -------------------
-    public function findByDeviceId(int $deviceId): ?PhysicalDeviceDetail
+    public function getByDeviceId(int $deviceId, array $with = []): ?PhysicalDeviceDetail
     {
-        return PhysicalDeviceDetail::find($deviceId);
+        return PhysicalDeviceDetail::with($with)->where('device_id', $deviceId)->first();
     }
 
     // ------------------- Write -------------------
@@ -30,15 +30,19 @@ class PhysicalDeviceDetailRepository implements PhysicalDeviceDetailRepositoryIn
 
     public function update(int $deviceId, array $data): bool
     {
-        $detail = $this->findByDeviceId($deviceId);
-        if (!$detail) return false;
+        $detail = $this->getByDeviceId($deviceId);
+        if (!$detail) {
+            return false;
+        }
         return $detail->update($data);
     }
 
     public function delete(int $deviceId): bool
     {
-        $detail = $this->findByDeviceId($deviceId);
-        if (!$detail) return false;
+        $detail = $this->getByDeviceId($deviceId);
+        if (!$detail) {
+            return false;
+        }
         return (bool) $detail->delete();
     }
 

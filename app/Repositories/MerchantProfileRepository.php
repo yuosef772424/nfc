@@ -18,24 +18,24 @@ class MerchantProfileRepository implements MerchantProfileRepositoryInterface
     }
 
     // ------------------- Retrieval -------------------
-    public function findByUserId(int $userId): ?MerchantProfile
+    public function getByUserId(int $userId, array $with = []): ?MerchantProfile
     {
-        return MerchantProfile::find($userId);
+        return MerchantProfile::with($with)->where('user_id', $userId)->first();
     }
 
-    public function getAll(int $perPage = 20): LengthAwarePaginator
+    public function getAll(int $perPage = 20, array $with = []): LengthAwarePaginator
     {
-        return MerchantProfile::paginate($perPage);
+        return MerchantProfile::with($with)->paginate($perPage);
     }
 
-    public function getActive(): Collection
+    public function getActive(array $with = []): Collection
     {
-        return MerchantProfile::where('is_active', true)->get();
+        return MerchantProfile::with($with)->where('is_active', true)->get();
     }
 
-    public function getByBusinessType(string $businessType, int $perPage = 20): LengthAwarePaginator
+    public function getByBusinessType(string $businessType, int $perPage = 20, array $with = []): LengthAwarePaginator
     {
-        return MerchantProfile::where('business_type', $businessType)->paginate($perPage);
+        return MerchantProfile::with($with)->where('business_type', $businessType)->paginate($perPage);
     }
 
     // ------------------- Write -------------------
@@ -47,8 +47,10 @@ class MerchantProfileRepository implements MerchantProfileRepositoryInterface
 
     public function update(int $userId, array $data): bool
     {
-        $profile = $this->findByUserId($userId);
-        if (!$profile) return false;
+        $profile = $this->getByUserId($userId);
+        if (!$profile) {
+            return false;
+        }
         return $profile->update($data);
     }
 
@@ -59,8 +61,10 @@ class MerchantProfileRepository implements MerchantProfileRepositoryInterface
 
     public function delete(int $userId): bool
     {
-        $profile = $this->findByUserId($userId);
-        if (!$profile) return false;
+        $profile = $this->getByUserId($userId);
+        if (!$profile) {
+            return false;
+        }
         return (bool) $profile->delete();
     }
 
@@ -72,11 +76,7 @@ class MerchantProfileRepository implements MerchantProfileRepositoryInterface
 
     public function isActive(int $userId): bool
     {
-        $profile = $this->findByUserId($userId);
+        $profile = $this->getByUserId($userId);
         return $profile && $profile->is_active;
     }
 }
-
-// INSERT INTO app_config (group, key, value, label, meta) VALUES
-// ('constant', 'ledger_entry_type.debit', 'debit', 'مدين (خصم)', '{"category":"ledger_entry_type"}'),
-// ('constant', 'ledger_entry_type.credit', 'credit', 'دائن (إضافة)', '{"category":"ledger_entry_type"}');

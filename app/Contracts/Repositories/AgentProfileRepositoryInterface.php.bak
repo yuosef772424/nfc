@@ -2,40 +2,34 @@
 
 namespace App\Contracts\Repositories;
 
-use App\Models\UserKyc;
+use App\Models\AgentProfile;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Illuminate\Database\Eloquent\Collection;
 
-interface UserKycRepositoryInterface
+interface AgentProfileRepositoryInterface
 {
     // ---------------------------------------------------------------
     // Retrieval
     // ---------------------------------------------------------------
+    public function findByUserId(int $userId): ?AgentProfile;
+    public function getAll(int $perPage = 20): LengthAwarePaginator;
+    public function getActive(): Collection;
 
-    public function getByUserId(int $userId): ?UserKyc;
-
-    public function getPending(int $perPage = 20): LengthAwarePaginator;   // تعوض scopePending
-
-    public function getVerified(int $perPage = 20): LengthAwarePaginator;  // تعوض scopeVerified
+  
+    public function calculateCommission(int $userId, float $amount): float;
 
     // ---------------------------------------------------------------
     // Write
     // ---------------------------------------------------------------
-
-    public function createOrUpdate(int $userId, array $data): UserKyc;
-
-    public function markVerified(int $userId): bool;
-
+    public function create(int $userId, array $data): AgentProfile;
     public function update(int $userId, array $data): bool;
-
+    public function updateCommission(int $userId, string $type, float $value): bool;
+    public function setActive(int $userId, bool $isActive): bool;
     public function delete(int $userId): bool;
 
     // ---------------------------------------------------------------
-    // Checks 
+    // Checks
     // ---------------------------------------------------------------
-
-    public function isVerified(int $userId): bool;    // كانت isVerified
-
-    public function isExpired(int $userId): bool;     // كانت isExpired
-
     public function exists(int $userId): bool;
+    public function isActive(int $userId): bool;
 }

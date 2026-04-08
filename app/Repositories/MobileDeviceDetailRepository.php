@@ -16,33 +16,35 @@ class MobileDeviceDetailRepository implements MobileDeviceDetailRepositoryInterf
         $this->configRepo = $configRepo;
     }
 
-    // ------------------- دوال مساعدة لقراءة الثوابت من app_config -------------------
+    // ------------------- Helpers -------------------
     protected function getBiometricTypeConstant(string $typeKey): ?string
     {
         return $this->configRepo->getValue('constant', "biometric_type.{$typeKey}");
     }
 
     // ------------------- Retrieval -------------------
-    public function findByDeviceId(int $deviceId): ?MobileDeviceDetail
+    public function getByDeviceId(int $deviceId, array $with = []): ?MobileDeviceDetail
     {
-        return MobileDeviceDetail::find($deviceId);
+        return MobileDeviceDetail::with($with)->where('device_id', $deviceId)->first();
     }
 
-    public function getByFingerprint(string $fingerprint): ?MobileDeviceDetail
+    public function getByFingerprint(string $fingerprint, array $with = []): ?MobileDeviceDetail
     {
-        return MobileDeviceDetail::where('device_fingerprint', $fingerprint)->first();
+        return MobileDeviceDetail::with($with)->where('device_fingerprint', $fingerprint)->first();
     }
 
     public function hasNfc(int $deviceId): bool
     {
-        $detail = $this->findByDeviceId($deviceId);
+        $detail = $this->getByDeviceId($deviceId);
         return $detail && $detail->nfc_supported === true;
     }
 
     public function hasBiometric(int $deviceId): bool
     {
-        $detail = $this->findByDeviceId($deviceId);
-        if (!$detail) return false;
+        $detail = $this->getByDeviceId($deviceId);
+        if (!$detail) {
+            return false;
+        }
         $noneType = $this->getBiometricTypeConstant('none') ?? 'none';
         return $detail->biometric_type !== $noneType;
     }
@@ -56,8 +58,10 @@ class MobileDeviceDetailRepository implements MobileDeviceDetailRepositoryInterf
 
     public function update(int $deviceId, array $data): bool
     {
-        $detail = $this->findByDeviceId($deviceId);
-        if (!$detail) return false;
+        $detail = $this->getByDeviceId($deviceId);
+        if (!$detail) {
+            return false;
+        }
         return $detail->update($data);
     }
 
@@ -68,8 +72,10 @@ class MobileDeviceDetailRepository implements MobileDeviceDetailRepositoryInterf
 
     public function delete(int $deviceId): bool
     {
-        $detail = $this->findByDeviceId($deviceId);
-        if (!$detail) return false;
+        $detail = $this->getByDeviceId($deviceId);
+        if (!$detail) {
+            return false;
+        }
         return (bool) $detail->delete();
     }
 

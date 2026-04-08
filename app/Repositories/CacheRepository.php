@@ -37,13 +37,17 @@ class CacheRepository implements CacheRepositoryInterface
         return Cache::has($key);
     }
 
-
+    /**
+     * Update the expiration time of an existing cache key.
+     * Note: Laravel does not have a native `expire` method, so we re-put the value with new TTL.
+     */
     public function expire(string $key, int $ttlSeconds): bool
-{
-    if (!Cache::has($key)) {
-        return false;
-    }
+    {
+        if (!$this->has($key)) {
+            return false;
+        }
 
-    $value = Cache::get($key);
-    return Cache::put($key, $value, $ttlSeconds);
+        $value = $this->get($key);
+        return $this->put($key, $value, $ttlSeconds);
+    }
 }
