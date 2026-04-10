@@ -5,16 +5,15 @@ namespace App\Services\Auth;
 use App\Contracts\Repositories\AppConfigRepositoryInterface;
 use App\Contracts\Repositories\AuditLogRepositoryInterface;
 use App\Contracts\Repositories\CacheRepositoryInterface;
-use App\Contracts\Repositories\SessionRepositoryInterface;
 use App\Contracts\Repositories\UserRepositoryInterface;
 use App\Contracts\Repositories\WalletRepositoryInterface;
 use App\Contracts\Repositories\AgentProfileRepositoryInterface;
 use App\Contracts\Repositories\MerchantProfileRepositoryInterface;
+use App\Services\Auth\SessionService;
 use App\Traits\ConfigurableTrait;
 use App\Traits\RateLimiterTrait;
 use App\Traits\AuditableTrait;
 use App\Traits\OtpVerificationTrait;
-use App\Traits\SessionManagementTrait;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
@@ -25,8 +24,7 @@ class GuestAuthService
     use ConfigurableTrait,
         RateLimiterTrait,
         AuditableTrait,
-        OtpVerificationTrait,
-        SessionManagementTrait;
+        OtpVerificationTrait;
 
     public function __construct(
         protected UserRepositoryInterface $userRepo,
@@ -35,24 +33,21 @@ class GuestAuthService
         protected MerchantProfileRepositoryInterface $merchantProfileRepo,
         protected AuditLogRepositoryInterface $auditLogRepo,
         protected CacheRepositoryInterface $cacheRepo,
-        protected SessionRepositoryInterface $sessionRepo,
+        protected SessionService $sessionService,
         protected AppConfigRepositoryInterface $configRepo,
     ) {}
 
     // ------------------- تنفيذ الدوال المجردة من الـ Traits -------------------
-
     protected function getCacheRepo(): CacheRepositoryInterface { return $this->cacheRepo; }
     protected function getAuditLogRepo(): AuditLogRepositoryInterface { return $this->auditLogRepo; }
     protected function getConfigRepo(): AppConfigRepositoryInterface { return $this->configRepo; }
-    protected function getSessionRepo(): SessionRepositoryInterface { return $this->sessionRepo; }
-    protected function getDefaultSessionExpiry(): int { return $this->getSessionExpiryMinutes(); }
 
-    // تنفيذ دوال OtpVerificationTrait (يمكن جلب القيم من ConfigurableTrait)
-    protected function getOtpTtlSeconds(): int { return 300; } // 5 دقائق
+    // دوال OtpVerificationTrait
+    protected function getOtpTtlSeconds(): int { return 300; }
     protected function getOtpMaxResendAttempts(): int { return $this->getMaxVerificationAttempts(); }
     protected function getOtpResendWindowSeconds(): int { return $this->getVerificationLockoutSeconds(); }
 
-    // دوال القيود (بعضها مستخدم مباشرة من ConfigurableTrait، لكننا سنعيد تعريفها للوضوح)
+    // دوال القيود
     protected function getMaxLoginAttempts(): int { return (int) $this->configRepo->getValue('security', 'login.max_attempts') ?? 5; }
     protected function getLoginLockoutSeconds(): int { return (int) $this->configRepo->getValue('security', 'login.lockout_seconds') ?? 300; }
     protected function getMaxRegistrationAttempts(): int { return (int) $this->configRepo->getValue('security', 'registration.max_attempts') ?? 3; }
@@ -61,9 +56,9 @@ class GuestAuthService
     protected function getResetPasswordLockoutSeconds(): int { return (int) $this->configRepo->getValue('security', 'reset_password.lockout_seconds') ?? 900; }
     protected function getMaxVerificationAttempts(): int { return (int) $this->configRepo->getValue('security', 'verification.max_attempts') ?? 5; }
     protected function getVerificationLockoutSeconds(): int { return (int) $this->configRepo->getValue('security', 'verification.lockout_seconds') ?? 3600; }
+    protected function getSessionExpiryMinutes(): int { return (int) $this->configRepo->getValue('policy', 'session.expiry_minutes') ?? 120; }
 
     // ------------------- عمليات التسجيل -------------------
-
     public function register(array $data): array
     {
         $email = $data['email'];
@@ -117,7 +112,6 @@ class GuestAuthService
     }
 
     // ------------------- تسجيل الدخول -------------------
-
     public function login(string $login, string $password, string $deviceInfo = '', ?array $location = null): array
     {
         $attemptKey = "login_attempts:" . md5($login);
@@ -143,14 +137,22 @@ class GuestAuthService
         }
 
         $this->resetAttempts($attemptKey);
-        $session = $this->createNewSession($user->id, ['user_agent' => $deviceInfo ?: request()->userAgent()], $location);
-        $this->logAudit('login', 'user', $user->id, $user->id, null, ['session_id' => $session['session_id']]);
+
+        // استخدام SessionService لإنشاء الجلسة
+        $sessionData = $this->sessionService->createSession(
+            userId: $user->id,
+            deviceInfo: ['user_agent' => $deviceInfo ?: request()->userAgent()],
+            location: $location ?? ['ip' => request()->ip()],
+            expiryMinutes: $this->getSessionExpiryMinutes()
+        );
+
+        $this->logAudit('login', 'user', $user->id, $user->id, null, ['session_id' => $sessionData['session_id']]);
 
         return [
-            'user' => $user->toArray(),
+            'user'    => $user->toArray(),
             'session' => [
-                'token' => $session['token'],
-                'expires_at' => $session['expires_at'],
+                'token'      => $sessionData['token'],
+                'expires_at' => $sessionData['expires_at'],
             ],
         ];
     }
@@ -161,7 +163,6 @@ class GuestAuthService
     }
 
     // ------------------- إعادة تعيين كلمة المرور -------------------
-
     public function requestPasswordReset(string $emailOrPhone): string
     {
         $key = "reset_request_attempts:" . md5($emailOrPhone);
@@ -178,7 +179,7 @@ class GuestAuthService
         $otpKey = "password_reset:user:" . $user->id;
         $code = $this->generateOtpCode(6);
         $this->storeOtpCode($otpKey, $code, $this->getOtpTtlSeconds());
-        $this->resetAttempts($key); // success
+        $this->resetAttempts($key);
 
         return $code;
     }
@@ -206,14 +207,14 @@ class GuestAuthService
         $updated = $this->userRepo->update($user->id, ['password' => Hash::make($newPassword)]);
 
         if ($updated) {
-            $this->sessionRepo->deleteAllByUserId($user->id);
+            // إلغاء جميع جلسات المستخدم بعد تغيير كلمة المرور
+            $this->sessionService->revokeAllSessions($user->id);
             $this->logAudit('password_reset', 'user', $user->id, $user->id, null, null);
         }
         return $updated;
     }
 
     // ------------------- تأكيد البريد الإلكتروني -------------------
-
     public function sendEmailVerification(int $userId): void
     {
         $user = $this->userRepo->findById($userId);
@@ -225,8 +226,8 @@ class GuestAuthService
         $otpKey = "email_verification:{$userId}";
         $code = $this->generateOtpCode(6);
         $this->storeOtpCode($otpKey, $code, $this->getOtpTtlSeconds());
-        $this->recordFailedAttempt($key, $this->getVerificationLockoutSeconds()); // record request
-        // هنا يمكن إرسال الكود عبر البريد الإلكتروني (حدث)
+        $this->recordFailedAttempt($key, $this->getVerificationLockoutSeconds());
+        // هنا يمكن إرسال الكود عبر البريد الإلكتروني (Event)
     }
 
     public function verifyEmail(int $userId, string $code): bool

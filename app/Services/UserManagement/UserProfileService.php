@@ -5,8 +5,8 @@ namespace App\Services\UserManagement;
 use App\Contracts\Repositories\AppConfigRepositoryInterface;
 use App\Contracts\Repositories\AuditLogRepositoryInterface;
 use App\Contracts\Repositories\CacheRepositoryInterface;
-use App\Contracts\Repositories\SessionRepositoryInterface;
 use App\Contracts\Repositories\UserRepositoryInterface;
+use App\Services\Auth\SessionService;
 use App\Traits\ConfigurableTrait;
 use App\Traits\RateLimiterTrait;
 use App\Traits\AuditableTrait;
@@ -26,43 +26,34 @@ class UserProfileService
         protected AuditLogRepositoryInterface $auditLogRepo,
         protected CacheRepositoryInterface $cacheRepo,
         protected AppConfigRepositoryInterface $configRepo,
-        protected SessionRepositoryInterface $sessionRepo,
+        protected SessionService $sessionService,
     ) {}
 
     // ------------------- تنفيذ الدوال المجردة -------------------
     protected function getCacheRepo(): CacheRepositoryInterface { return $this->cacheRepo; }
     protected function getAuditLogRepo(): AuditLogRepositoryInterface { return $this->auditLogRepo; }
     protected function getConfigRepo(): AppConfigRepositoryInterface { return $this->configRepo; }
-    protected function getSessionRepo(): SessionRepositoryInterface { return $this->sessionRepo; }
 
-    // دوال OtpVerificationTrait (نستخدم القيم الافتراضية أو من Config)
-    protected function getOtpTtlSeconds(): int { return 900; } // 15 minutes
+    protected function getOtpTtlSeconds(): int { return 900; }
     protected function getOtpMaxResendAttempts(): int { return $this->getMaxEmailChangeAttempts(); }
     protected function getOtpResendWindowSeconds(): int { return $this->getEmailChangeLockoutSeconds(); }
 
-    // دوال القيود من ConfigurableTrait (نعيد تعريفها للوضوح، أو يمكن نقلها إلى الـ Trait)
-    protected function getMaxEmailChangeAttempts(): int
-    {
+    protected function getMaxEmailChangeAttempts(): int {
         return (int) $this->configRepo->getValue('security', 'email_change.max_attempts') ?? 3;
     }
-    protected function getEmailChangeLockoutSeconds(): int
-    {
+    protected function getEmailChangeLockoutSeconds(): int {
         return (int) $this->configRepo->getValue('security', 'email_change.lockout_seconds') ?? 900;
     }
-    protected function getMaxPhoneChangeAttempts(): int
-    {
+    protected function getMaxPhoneChangeAttempts(): int {
         return (int) $this->configRepo->getValue('security', 'phone_change.max_attempts') ?? 3;
     }
-    protected function getPhoneChangeLockoutSeconds(): int
-    {
+    protected function getPhoneChangeLockoutSeconds(): int {
         return (int) $this->configRepo->getValue('security', 'phone_change.lockout_seconds') ?? 900;
     }
-    protected function getMaxProfileUpdateAttempts(): int
-    {
+    protected function getMaxProfileUpdateAttempts(): int {
         return (int) $this->configRepo->getValue('security', 'profile_update.max_attempts') ?? 5;
     }
-    protected function getProfileUpdateLockoutSeconds(): int
-    {
+    protected function getProfileUpdateLockoutSeconds(): int {
         return (int) $this->configRepo->getValue('security', 'profile_update.lockout_seconds') ?? 600;
     }
 
@@ -116,7 +107,7 @@ class UserProfileService
         $this->storeOtpCode("email_change:{$userId}", json_encode(['new_email' => $newEmail, 'code' => $code]), $this->getOtpTtlSeconds());
 
         $this->recordFailedAttempt($attemptKey, $this->getEmailChangeLockoutSeconds());
-        // إرسال الكود... (حدث)
+        // TODO: dispatch event to send email
     }
 
     public function confirmEmailChange(int $userId, string $code): bool
@@ -160,6 +151,7 @@ class UserProfileService
         $this->storeOtpCode("phone_change:{$userId}", json_encode(['new_phone' => $newPhone, 'code' => $code]), $this->getOtpTtlSeconds());
 
         $this->recordFailedAttempt($attemptKey, $this->getPhoneChangeLockoutSeconds());
+        // TODO: dispatch event to send SMS
     }
 
     public function confirmPhoneChange(int $userId, string $code): bool
@@ -195,7 +187,7 @@ class UserProfileService
 
         $updated = $this->userRepo->update($userId, ['status' => 'inactive']);
         if ($updated) {
-            $this->sessionRepo->deleteAllByUserId($userId);
+            $this->sessionService->revokeAllSessions($userId);
             $this->logAudit('account_deactivated', 'user', $userId, $userId, null, null);
         }
         return $updated;
@@ -227,7 +219,7 @@ class UserProfileService
 
         $updated = $this->userRepo->update($userId, ['status' => 'deleted']);
         if ($updated) {
-            $this->sessionRepo->deleteAllByUserId($userId);
+            $this->sessionService->revokeAllSessions($userId);
             $this->logAudit('account_deleted', 'user', $userId, $userId, null, null);
         }
         return $updated;

@@ -15,9 +15,7 @@ use Carbon\Carbon;
 
 class KycService
 {
-    use ConfigurableTrait,
-        RateLimiterTrait,
-        AuditableTrait;
+    use ConfigurableTrait, RateLimiterTrait, AuditableTrait;
 
     public function __construct(
         protected UserKycRepositoryInterface $kycRepo,
@@ -27,31 +25,19 @@ class KycService
         protected AppConfigRepositoryInterface $configRepo,
     ) {}
 
-    // ------------------- تنفيذ الدوال المجردة من الـ Traits -------------------
     protected function getCacheRepo(): CacheRepositoryInterface { return $this->cacheRepo; }
     protected function getAuditLogRepo(): AuditLogRepositoryInterface { return $this->auditLogRepo; }
     protected function getConfigRepo(): AppConfigRepositoryInterface { return $this->configRepo; }
 
-    // دوال القيود (تضاف إلى ConfigurableTrait لاحقاً)
-    protected function getMaxKycSubmissionAttempts(): int
-    {
+    protected function getMaxKycSubmissionAttempts(): int {
         return (int) $this->configRepo->getValue('security', 'kyc.submission.max_attempts') ?? 3;
     }
-    protected function getKycSubmissionLockoutSeconds(): int
-    {
-        return (int) $this->configRepo->getValue('security', 'kyc.submission.lockout_seconds') ?? 86400; // 24 hours
-    }
-    protected function getMaxKycVerificationAttempts(): int
-    {
-        return (int) $this->configRepo->getValue('security', 'kyc.verification.max_attempts') ?? 5;
-    }
-    protected function getKycVerificationLockoutSeconds(): int
-    {
-        return (int) $this->configRepo->getValue('security', 'kyc.verification.lockout_seconds') ?? 3600;
+    protected function getKycSubmissionLockoutSeconds(): int {
+        return (int) $this->configRepo->getValue('security', 'kyc.submission.lockout_seconds') ?? 86400;
     }
 
     // ------------------- رفع طلب KYC -------------------
-    public function submitKyc(int $userId, array $data): array
+    public function submitKyc(int $userId, array $data, ?array $documents = null): array
     {
         $user = $this->userRepo->findById($userId);
         if (!$user) {
@@ -71,6 +57,16 @@ class KycService
         $expiry = Carbon::parse($data['id_expiry_date']);
         if ($expiry->isPast()) {
             throw ValidationException::withMessages(['id_expiry_date' => 'ID expiry date must be in the future.']);
+        }
+
+        // رفع المستندات (صور الهوية)
+        if ($documents) {
+            $documentPaths = [];
+            foreach ($documents as $key => $file) {
+                $path = $file->store('kyc_documents', 'public');
+                $documentPaths[$key] = $path;
+            }
+            $data['documents'] = $documentPaths;
         }
 
         $data['verified_at'] = null;
@@ -110,7 +106,7 @@ class KycService
 
         $updated = $this->kycRepo->update($userId, [
             'verified_at' => null,
-            'rejection_reason' => $reason, // تأكد من وجود العمود
+            'rejection_reason' => $reason,
         ]);
 
         $attemptKey = "kyc_submission_attempts:user:" . $userId;
@@ -135,33 +131,29 @@ class KycService
             'is_verified'     => $kyc->verified_at !== null,
             'verified_at'     => $kyc->verified_at?->toDateTimeString(),
             'is_expired'      => $this->isExpired($userId),
+            'rejection_reason'=> $kyc->rejection_reason ?? null,
+            'documents'       => $kyc->documents ?? [],
         ];
     }
 
-    public function isExpired(int $userId): bool
-    {
-        return $this->kycRepo->isExpired($userId);
-    }
+    public function isExpired(int $userId): bool { return $this->kycRepo->isExpired($userId); }
+    public function isVerified(int $userId): bool { return $this->kycRepo->isVerified($userId); }
 
-    public function isVerified(int $userId): bool
-    {
-        return $this->kycRepo->isVerified($userId);
-    }
-
-    public function canResubmit(int $userId): bool
-    {
+    public function canResubmit(int $userId): bool {
         $attemptKey = "kyc_submission_attempts:user:" . $userId;
         $attempts = $this->cacheRepo->get($attemptKey, 0);
         return $attempts < $this->getMaxKycSubmissionAttempts();
     }
 
-    public function getPendingRequests(int $perPage = 20): array
-    {
+    public function getPendingRequests(int $perPage = 20): array {
         return $this->kycRepo->getPending($perPage)->toArray();
     }
 
-    public function getVerifiedRequests(int $perPage = 20): array
-    {
+    public function getVerifiedRequests(int $perPage = 20): array {
         return $this->kycRepo->getVerified($perPage)->toArray();
+    }
+
+    public function getAllPending(): \Illuminate\Pagination\LengthAwarePaginator {
+        return $this->kycRepo->getPending(20);
     }
 }

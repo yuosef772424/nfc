@@ -5,8 +5,8 @@ namespace App\Services\Auth;
 use App\Contracts\Repositories\AppConfigRepositoryInterface;
 use App\Contracts\Repositories\AuditLogRepositoryInterface;
 use App\Contracts\Repositories\CacheRepositoryInterface;
-use App\Contracts\Repositories\SessionRepositoryInterface;
 use App\Contracts\Repositories\UserRepositoryInterface;
+use App\Services\Auth\SessionService;
 use App\Traits\ConfigurableTrait;
 use App\Traits\RateLimiterTrait;
 use App\Traits\AuditableTrait;
@@ -22,7 +22,7 @@ class AuthenticatedUserService
 
     public function __construct(
         protected UserRepositoryInterface $userRepo,
-        protected SessionRepositoryInterface $sessionRepo,
+        protected SessionService $sessionService,
         protected AuditLogRepositoryInterface $auditLogRepo,
         protected CacheRepositoryInterface $cacheRepo,
         protected AppConfigRepositoryInterface $configRepo,
@@ -33,7 +33,7 @@ class AuthenticatedUserService
     protected function getAuditLogRepo(): AuditLogRepositoryInterface { return $this->auditLogRepo; }
     protected function getConfigRepo(): AppConfigRepositoryInterface { return $this->configRepo; }
 
-    // دوال إضافية من ConfigurableTrait (نعيد تعريفها للوضوح، لكنها موجودة بالفعل في الـ Trait)
+    // دوال إعدادات من ConfigurableTrait
     protected function getMaxPasswordChangeAttempts(): int { return (int) $this->configRepo->getValue('security', 'password_change.max_attempts') ?? 3; }
     protected function getPasswordChangeLockoutSeconds(): int { return (int) $this->configRepo->getValue('security', 'password_change.lockout_seconds') ?? 900; }
     protected function getMaxRefreshAttempts(): int { return (int) $this->configRepo->getValue('security', 'token_refresh.max_attempts') ?? 5; }
@@ -43,24 +43,18 @@ class AuthenticatedUserService
     // ------------------- تسجيل الخروج -------------------
     public function logout(string $tokenHash): bool
     {
-        $session = $this->sessionRepo->getByTokenHash($tokenHash);
+        $session = $this->sessionService->getSessionByTokenHash($tokenHash);
         if (!$session) {
             throw ValidationException::withMessages(['token' => 'Invalid session.']);
         }
 
-        $userId = $session->user_id;
-        $deleted = $this->sessionRepo->deleteById($session->id);
-
-        if ($deleted) {
-            $this->logAudit('logout', 'user', $userId, $userId, null, null);
-        }
-        return $deleted;
+        return $this->sessionService->revokeSession($session->id, $session->user_id);
     }
 
     // ------------------- تجديد التوكن -------------------
     public function refreshToken(string $oldTokenHash): array
     {
-        $oldSession = $this->sessionRepo->getByTokenHash($oldTokenHash);
+        $oldSession = $this->sessionService->getSessionByTokenHash($oldTokenHash);
         if (!$oldSession) {
             throw ValidationException::withMessages(['token' => 'Invalid session.']);
         }
@@ -86,7 +80,7 @@ class AuthenticatedUserService
         $this->resetAttempts($attemptKey);
 
         return [
-            'token' => $newTokenHash,
+            'token'      => $newTokenHash,
             'expires_at' => $newExpiresAt->toDateTimeString(),
         ];
     }
@@ -119,23 +113,18 @@ class AuthenticatedUserService
     // ------------------- إبطال جميع جلسات المستخدم -------------------
     public function revokeAllSessions(int $userId, ?string $exceptTokenHash = null): int
     {
-        $count = $this->sessionRepo->deleteAllByUserId($userId);
-        // الاحتفاظ بالجلسة الحالية إذا أردت
-        if ($exceptTokenHash && $count > 0) {
-            $current = $this->sessionRepo->getByTokenHash($exceptTokenHash);
-            if ($current) {
-                $current->update(['expires_at' => now()->addMinutes($this->getSessionExpiryMinutes())]);
-                return $count - 1;
-            }
+        if ($exceptTokenHash) {
+            return $this->sessionService->revokeOtherSessions($userId, $exceptTokenHash);
         }
-        return $count;
+        return $this->sessionService->revokeAllSessions($userId);
     }
 
     // ------------------- الحصول على معلومات الجلسة الحالية -------------------
     public function getCurrentSession(string $tokenHash): ?array
     {
-        $session = $this->sessionRepo->getByTokenHash($tokenHash);
+        $session = $this->sessionService->getSessionByTokenHash($tokenHash);
         if (!$session) return null;
+
         return [
             'id'          => $session->id,
             'user_id'     => $session->user_id,
@@ -143,5 +132,14 @@ class AuthenticatedUserService
             'device_info' => $session->device_info,
             'location'    => $session->location,
         ];
+    }
+
+    // ------------------- الحصول على المستخدم الحالي -------------------
+    public function getAuthenticatedUser(string $tokenHash): ?object
+    {
+        $session = $this->sessionService->getSessionByTokenHash($tokenHash);
+        if (!$session) return null;
+
+        return $this->userRepo->findById($session->user_id);
     }
 }

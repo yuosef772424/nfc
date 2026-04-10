@@ -74,16 +74,17 @@ class DeviceAndCardRequests
     }
 
     // ==================== MobileDeviceDetail ====================
-    public static function storeMobileDeviceDetail(): array
-    {
-        return [
-            'device_id' => 'required|integer|exists:nfc_devices,id|unique:mobile_device_details,device_id',
-            'device_fingerprint' => 'required|string|unique:mobile_device_details,device_fingerprint',
-            'nfc_supported' => 'required|boolean',
-            'biometric_type' => ValidationRules::biometricType(),
-        ];
-    }
-
+  public static function storeMobileDeviceDetail(): array
+{
+    return [
+        'device_id' => 'required|integer|exists:nfc_devices,id|unique:mobile_device_details,device_id',
+        'device_fingerprint' => 'required|string|unique:mobile_device_details,device_fingerprint',
+        'nfc_supported' => 'required|boolean',
+        'biometric_type' => ValidationRules::biometricType(),
+        'os_version' => 'nullable|string|max:50',
+        'app_version' => 'nullable|string|max:20',
+    ];
+}
     public static function updateMobileDeviceDetail(): array
     {
         return [

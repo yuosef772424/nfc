@@ -25,13 +25,14 @@ class WithdrawalService
         protected LedgerEntryRepositoryInterface $ledgerRepo,
         protected TransactionRepositoryInterface $transactionRepo,
         protected AppConfigRepositoryInterface $configRepo,
+        protected CommissionService $commissionService,
     ) {}
 
     // ------------------- تنفيذ الدوال المجردة -------------------
     protected function getAuditLogRepo(): AuditLogRepositoryInterface { return $this->auditLogRepo; }
     protected function getConfigRepo(): AppConfigRepositoryInterface { return $this->configRepo; }
 
-    // ------------------- دوال الإعدادات (من ConfigurableTrait أو محلية) -------------------
+    // ------------------- دوال الإعدادات -------------------
     protected function getVerificationCodeLength(): int
     {
         return (int) $this->configRepo->getValue('withdrawal', 'verification_code_length') ?? 6;
@@ -155,7 +156,7 @@ class WithdrawalService
                 balanceAfter: $newSystemBalance
             );
 
-            // 6. تسجيل معاملة منفصلة (اختياري)
+            // 6. تسجيل معاملة منفصلة
             $this->transactionRepo->create([
                 'sender_wallet_id'   => $wallet->id,
                 'receiver_wallet_id' => null,
@@ -166,11 +167,25 @@ class WithdrawalService
                 'description'        => "Withdrawal #{$withdrawalId}",
             ]);
 
-            // 7. فحص توازن الدفتر
+            // 7. تسجيل العمولة في CommissionLog
+            if ($withdrawal->commission_amount > 0) {
+                $commissionLog = $this->commissionService->createCommissionLog(
+                    recipientId: $withdrawal->agent_id,
+                    recipientType: 'agent',
+                    amount: $withdrawal->commission_amount,
+                    referenceType: 'withdrawal',
+                    referenceId: $withdrawalId,
+                    description: "Commission for withdrawal #{$withdrawalId}"
+                );
+                // إذا كانت العمولة تدفع فوراً:
+                // $this->commissionService->markAsPaid($commissionLog['id']);
+            }
+
+            // 8. فحص توازن الدفتر
             $this->checkLedgerBalance($wallet->id, 'withdrawal_complete_user');
             $this->checkLedgerBalance($systemWalletId, 'withdrawal_complete_system');
 
-            // 8. تسجيل حدث التدقيق
+            // 9. تسجيل حدث التدقيق
             $this->logAudit(
                 action: 'withdrawal_completed',
                 entity: 'withdrawal',
