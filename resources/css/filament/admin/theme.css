@@ -1,0 +1,13 @@
+/* تثبيت الشريط السفلي فوق كل شيء */
+.fi-body {
+    padding-bottom: 4rem !important;
+}
+
+.fixed.bottom-0 {
+    backdrop-filter: blur(8px);
+    background-color: rgba(255, 255, 255, 0.9);
+}
+
+.dark .fixed.bottom-0 {
+    background-color: rgba(17, 24, 39, 0.9);
+}

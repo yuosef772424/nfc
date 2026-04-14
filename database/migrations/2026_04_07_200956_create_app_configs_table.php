@@ -8,7 +8,7 @@ return new class extends Migration
 {
     public function up()
     {
-        Schema::create('app_config', function (Blueprint $table) {
+        Schema::create('app_configs', function (Blueprint $table) {
             $table->id();
             $table->string('group');          // policy, constant, setting, feature
             $table->string('key');            // المفتاح داخل المجموعة

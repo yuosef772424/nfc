@@ -8,7 +8,7 @@ return new class extends Migration
 {
     public function up()
     {
-        Schema::create('sessions', function (Blueprint $table) {
+        Schema::create('sessionss', function (Blueprint $table) {
             $table->id();
             $table->foreignId('user_id')->constrained('users')->onDelete('cascade');
             $table->string('token_hash')->unique();
@@ -24,6 +24,6 @@ return new class extends Migration
 
     public function down()
     {
-        Schema::dropIfExists('sessions');
+        Schema::dropIfExists('sessionss');
     }
 };

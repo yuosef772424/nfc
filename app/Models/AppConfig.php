@@ -9,7 +9,7 @@ class AppConfig extends Model
 {
     use HasFactory;
 
-    protected $table = 'app_config';
+    protected $table = 'app_configs';
 
     protected $fillable = [
         'group', 'key', 'value', 'data_type', 'label',

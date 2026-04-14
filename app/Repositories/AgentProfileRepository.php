@@ -4,25 +4,11 @@ namespace App\Repositories;
 
 use App\Models\AgentProfile;
 use App\Contracts\Repositories\AgentProfileRepositoryInterface;
-use App\Contracts\Repositories\AppConfigRepositoryInterface;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Collection;
 
 class AgentProfileRepository implements AgentProfileRepositoryInterface
 {
-    protected AppConfigRepositoryInterface $configRepo;
-
-    public function __construct(AppConfigRepositoryInterface $configRepo)
-    {
-        $this->configRepo = $configRepo;
-    }
-
-    // ------------------- Helpers -------------------
-    protected function getCommissionTypeConstant(string $typeKey): ?string
-    {
-        return $this->configRepo->getValue('constant', "commission_type.{$typeKey}");
-    }
-
     // ------------------- Retrieval -------------------
     public function getByUserId(int $userId, array $with = []): ?AgentProfile
     {
@@ -46,8 +32,7 @@ class AgentProfileRepository implements AgentProfileRepositoryInterface
             return 0.0;
         }
 
-        $percentageType = $this->getCommissionTypeConstant('percentage') ?? 'percentage';
-        if ($profile->commission_type === $percentageType) {
+        if ($profile->commission_type === AgentProfile::COMMISSION_PERCENTAGE) {
             return round($amount * ($profile->commission_value / 100), 2);
         }
 

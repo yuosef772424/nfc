@@ -1,7 +1,7 @@
 <?php
 
 namespace App\Services\Auth;
-
+use Illuminate\Support\Str;
 use App\Contracts\Repositories\SessionRepositoryInterface;
 use App\Contracts\Repositories\AuditLogRepositoryInterface;
 use App\Contracts\Repositories\AppConfigRepositoryInterface;

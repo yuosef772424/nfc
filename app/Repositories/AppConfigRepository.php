@@ -45,23 +45,27 @@ class AppConfigRepository implements AppConfigRepositoryInterface
      * Get all configurations grouped (cached forever until cleared).
      */
     public function getAllGrouped(): array
-    {
-        return Cache::rememberForever(self::CACHE_KEY, function () {
-            return AppConfig::where('is_active', true)
-                ->orderBy('sort_order')
-                ->get(['group', 'key', 'value', 'data_type', 'label', 'sort_order', 'meta'])
-                ->groupBy('group')
-                ->transform(fn($group) => $group->map(fn($config) => [
-                    'key'          => $config->key,
-                    'value'        => $config->value,
-                    'casted_value' => $config->casted_value,
-                    'data_type'    => $config->data_type,
-                    'label'        => $config->label,
-                    'sort_order'   => $config->sort_order,
-                    'meta'         => $config->meta,
-                ]));
-        });
-    }
+{
+    return Cache::rememberForever(self::CACHE_KEY, function () {
+        $configs = AppConfig::where('is_active', true)
+            ->orderBy('sort_order')
+            ->get(['group', 'key', 'value', 'data_type', 'label', 'sort_order', 'meta']);
+
+        $grouped = [];
+        foreach ($configs as $config) {
+            $grouped[$config->group][] = [
+                'key'          => $config->key,
+                'value'        => $config->value,
+                'casted_value' => $config->casted_value,
+                'data_type'    => $config->data_type,
+                'label'        => $config->label,
+                'sort_order'   => $config->sort_order,
+                'meta'         => $config->meta ?? [],  // <-- ضمان أن meta مصفوفة
+            ];
+        }
+        return $grouped;
+    });
+}
 
     /**
      * Create or update a configuration and clear cache.
@@ -114,17 +118,18 @@ class AppConfigRepository implements AppConfigRepositoryInterface
         };
     }
 
-    private function matchesMetaFilters(array $itemMeta, array $metaFilters): bool
-    {
-        if (empty($metaFilters)) {
-            return true;
-        }
-
-        foreach ($metaFilters as $key => $value) {
-            if (!isset($itemMeta[$key]) || $itemMeta[$key] != $value) {
-                return false;
-            }
-        }
+    private function matchesMetaFilters(?array $itemMeta, array $metaFilters): bool
+{
+    $itemMeta = $itemMeta ?? [];
+    if (empty($metaFilters)) {
         return true;
     }
+
+    foreach ($metaFilters as $key => $value) {
+        if (!isset($itemMeta[$key]) || $itemMeta[$key] != $value) {
+            return false;
+        }
+    }
+    return true;
+}
 }

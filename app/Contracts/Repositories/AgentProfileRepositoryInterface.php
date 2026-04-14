@@ -25,4 +25,7 @@ interface AgentProfileRepositoryInterface
     // Checks
     public function exists(int $userId): bool;
     public function isActive(int $userId): bool;
+
+    
+
 }

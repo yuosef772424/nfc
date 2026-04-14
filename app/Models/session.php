@@ -10,7 +10,7 @@ class Session extends Model
 {
     use HasFactory;
 
-    protected $table = 'sessions';
+    protected $table = 'sessionss';
 
     protected $fillable = [
         'user_id',
